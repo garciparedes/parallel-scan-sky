@@ -25,4 +25,4 @@ make
 ## Authors
 
 * **Calvo Rojo, Adrián** - [Github](https://github.com/adrianetete)
-* **García Prad, Sergio** - [Github](https://github.com/garciparedes)
+* **García Prado, Sergio** - [Github](https://github.com/garciparedes)
