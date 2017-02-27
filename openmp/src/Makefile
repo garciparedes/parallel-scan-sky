@@ -4,8 +4,8 @@
 # Makefile: Contar cuerpos celestes
 #
 
-CC=gcc
-CFLAGS=-O3
+CC=gcc-4.8
+CFLAGS=-O3 -fopenmp
 
 EXES=ScanSky_openmp ScanSky_openmp_debug ScanSky_openmp_write
 
