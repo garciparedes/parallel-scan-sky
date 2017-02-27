@@ -1,6 +1,9 @@
 
 # Created by https://www.gitignore.io/api/c,c++,cuda,windows,linux,osx,latex
 
+ScanSky_*
+!ScanSky_*.c
+
 ### C ###
 # Prerequisites
 *.d
