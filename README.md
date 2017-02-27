@@ -6,9 +6,6 @@
 ### Usage:
 ```
 cd openmp/src
-```
-
-```
 ./run.sh ../../data-sets/circles1.data
 ```
 
@@ -21,12 +18,11 @@ cd openmp/src
 
 ```
 cd secuential/src
-```
-
-```
 make
-```
-
-```
 ./ScanSky ../../data-sets/circles1.data
 ```
+
+## Authors
+
+* **Calvo Rojo, Adrián** - [Github](https://github.com/adrianetete)
+* **García Prad, Sergio** - [Github](https://github.com/garciparedes)
