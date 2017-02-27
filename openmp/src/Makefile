@@ -1,5 +1,5 @@
 #
-# ComputaciÛn paralela (Grado IngenierÌa Inform·tica)
+# Computaci√≥n paralela (Grado Ingenier√≠a Inform√°tica)
 #
 # Makefile: Contar cuerpos celestes
 #
@@ -7,19 +7,18 @@
 CC=gcc
 CFLAGS=-O3
 
-EXES=ScanSky_seq ScanSky_seq_debug ScanSky_seq_write
+EXES=ScanSky_openmp ScanSky_openmp_debug ScanSky_openmp_write
 
 all: $(EXES)
 
-clean: 
+clean:
 	rm -f $(EXES)
 
-ScanSky_seq: ScanSky_seq.c cputils.h
+ScanSky_openmp: ScanSky_openmp.c cputils.h
 	$(CC) $(CFLAGS) $< -o $@
 
-ScanSky_seq_debug: ScanSky_seq.c cputils.h
+ScanSky_openmp_debug: ScanSky_openmp.c cputils.h
 	$(CC) $(CFLAGS) -DDEBUG -DWRITE $< -o $@
 
-ScanSky_seq_write: ScanSky_seq.c cputils.h
+ScanSky_openmp_write: ScanSky_openmp.c cputils.h
 	$(CC) $(CFLAGS) -DWRITE $< -o  $@
-
