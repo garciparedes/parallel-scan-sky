@@ -14,6 +14,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <time.h>
+#include <omp.h>
 #include "cputils.h"
 
 
@@ -173,6 +174,7 @@ int main (int argc, char* argv[])
 		flagCambio=0;
 
 		/* 4.2.1 Actualizacion copia */
+		#pragma omp parallel for shared(matrixResult, matrixResultCopy,columns, rows), private(i, j)
 		for(i=1;i<rows-1;i++){
 			for(j=1;j<columns-1;j++){
 				if(matrixResult[i*(columns)+j]!=-1){
@@ -182,6 +184,7 @@ int main (int argc, char* argv[])
 		}
 
 		/* 4.2.2 Computo y detecto si ha habido cambios */
+		#pragma omp parallel for shared(matrixData, matrixResult, matrixResultCopy,columns, rows), private(i, j), reduction(+:flagCambio)
 		for(i=1;i<rows-1;i++){
 			for(j=1;j<columns-1;j++){
 				flagCambio= flagCambio+ computation(i,j,columns, matrixData, matrixResult, matrixResultCopy);
@@ -202,6 +205,7 @@ int main (int argc, char* argv[])
 
 	/* 4.3 Inicio cuenta del numero de bloques */
 	numBlocks=0;
+	#pragma omp parallel for shared(matrixResult,columns, rows), private(i, j), reduction(+:numBlocks)
 	for(i=1;i<rows-1;i++){
 		for(j=1;j<columns-1;j++){
 			if(matrixResult[i*columns+j] == i*columns+j) numBlocks++;
