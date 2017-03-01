@@ -152,8 +152,13 @@ int main (int argc, char* argv[])
  		perror ("Error reservando memoria");
 	   	return -1;
 	}
-	for(i=0;i< rows; i++){
-		for(j=0;j< columns; j++){
+	/*
+		PELIGRO!!!!
+		Hay que revisar si recortar los índices es corecto.
+	*/
+	#pragma omp parallel for shared(matrixData, matrixResult,columns, rows), private(i, j)
+	for(i=1;i< rows-1; i++){
+		for(j=1;j< columns-1; j++){
 			matrixResult[i*(columns)+j]=-1;
 			// Si es 0 se trata del fondo y no lo computamos
 			if(matrixData[i*(columns)+j]!=0){
