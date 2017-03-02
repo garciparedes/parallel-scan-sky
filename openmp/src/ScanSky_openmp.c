@@ -24,7 +24,7 @@
 /**
 * Funcion secuencial para la busqueda de mi bloque
 */
-int computation(int x, int y, int columns, int* matrixData, int *matrixResult, int *matrixResultCopy){
+int computation(int x, int y, int columns, unsigned char* matrixData, int *matrixResult, int *matrixResultCopy){
 	// Inicialmente cojo mi indice
 	int result=matrixResultCopy[x*columns+y];
 	if( result!= -1){
@@ -70,7 +70,7 @@ int main (int argc, char* argv[])
 
 	int rows=-1;
 	int columns =-1;
-	int *matrixData=NULL;
+	unsigned char *matrixData=NULL;
 	int *matrixResult=NULL;
 	int *matrixResultCopy=NULL;
 	int numBlocks=-1;
@@ -98,7 +98,7 @@ int main (int argc, char* argv[])
 	columns = columns+2;
 
 	/* 2.3 Reservo la memoria necesaria para la matriz de datos */
-	matrixData= (int *)malloc( rows*(columns) * sizeof(int) );
+	matrixData= (unsigned char *)malloc( rows*(columns) * sizeof(unsigned char) );
 	if ( matrixData == NULL ) {
  		perror ("Error reservando memoria");
 	   	return -1;
@@ -189,7 +189,7 @@ int main (int argc, char* argv[])
 		}
 
 		/* 4.2.2 Computo y detecto si ha habido cambios */
-		#pragma omp parallel for shared(matrixData, matrixResult, matrixResultCopy,columns, rows), private(i, j), reduction(+:flagCambio)
+		#pragma omp parallel for shared(matrixData, matrixResult, matrixResultCopy,columns, rows), private(i, j), reduction(+:flagCambio), if(!flagCambio)
 		for(i=1;i<rows-1;i++){
 			for(j=1;j<columns-1;j++){
 				flagCambio= flagCambio+ computation(i,j,columns, matrixData, matrixResult, matrixResultCopy);
