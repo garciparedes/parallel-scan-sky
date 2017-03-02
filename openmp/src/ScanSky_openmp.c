@@ -159,7 +159,9 @@ int main (int argc, char* argv[])
 	   	return -1;
 	}
 
-	#pragma omp parallel for shared(matrixData, matrixResult, columns, rows), private(i, j), default(none)
+	#pragma omp parallel for \
+	shared(matrixData, matrixResult, columns, rows), private(i, j), \
+	default(none), schedule(static)
 	for(i=0;i< rows; i++){
 		for(j=0;j< columns; j++){
 			if(matrixData[i*(columns)+j]!=0){
@@ -179,7 +181,9 @@ int main (int argc, char* argv[])
 		flagCambio=0;
 
 		/* 4.2.2 Computo y detecto si ha habido cambios */
-		#pragma omp parallel for shared(matrixData, matrixResult,columns, rows), private(i, j), reduction(||:flagCambio), default(none)
+		#pragma omp parallel for \
+		shared(matrixData, matrixResult,columns, rows), private(i, j), \
+		reduction(||:flagCambio), default(none), schedule(static)
 		for(i=1;i<rows-1;i = i+1){
 			for(j=1+((i+1)%2);j<columns-1;j = j+2){
 				flagCambio = computation(i,j,columns, matrixData, matrixResult) || flagCambio;
@@ -199,7 +203,9 @@ int main (int argc, char* argv[])
 
 	/* 4.3 Inicio cuenta del numero de bloques */
 	numBlocks=0;
-	#pragma omp parallel for shared(matrixResult,columns, rows), private(i, j), reduction(+:numBlocks), default(none)
+	#pragma omp parallel for \
+	shared(matrixResult,columns, rows), private(i, j), \
+	reduction(+:numBlocks), default(none), schedule(static)
 	for(i=1;i<rows-1;i++){
 		for(j=1;j<columns-1;j++){
 			if(matrixResult[i*columns+j] == i*columns+j) numBlocks++;
