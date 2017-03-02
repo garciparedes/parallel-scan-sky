@@ -173,7 +173,7 @@ int main (int argc, char* argv[])
 		flagCambio=0;
 
 		/* 4.2.2 Computo y detecto si ha habido cambios */
-		#pragma omp parallel for shared(matrixData, matrixResult,columns, rows), private(i, j), reduction(+:flagCambio), default(none)
+		#pragma omp parallel for shared(matrixData, matrixResult,columns, rows), private(i, j), reduction(||:flagCambio), default(none)
 		for(i=1;i<rows-1;i++){
 			for(j=1;j<columns-1;j++){
 				flagCambio = computation(i,j,columns, matrixData, matrixResult) || flagCambio;
