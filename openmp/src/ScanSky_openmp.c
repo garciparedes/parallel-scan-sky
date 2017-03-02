@@ -26,26 +26,26 @@
 /**
 * Funcion secuencial para la busqueda de mi bloque
 */
-int computation(int x, int y, int columns, char* matrixData, int *matrixResult, int *matrixResultCopy){
+int computation(int x, int y, int columns, char* matrixData, int *matrixResult){
 	// Inicialmente cojo mi indice
-	int result=matrixResultCopy[x*columns+y];
+	int result=matrixResult[x*columns+y];
 	if( result!= -1){
 		//Si es de mi mismo grupo, entonces actualizo
 		if(matrixData[(x-1)*columns+y] == matrixData[x*columns+y])
 		{
-			result = min (result, matrixResultCopy[(x-1)*columns+y]);
+			result = min (result, matrixResult[(x-1)*columns+y]);
 		}
 		if(matrixData[(x+1)*columns+y] == matrixData[x*columns+y])
 		{
-			result = min (result, matrixResultCopy[(x+1)*columns+y]);
+			result = min (result, matrixResult[(x+1)*columns+y]);
 		}
 		if(matrixData[x*columns+y-1] == matrixData[x*columns+y])
 		{
-			result = min (result, matrixResultCopy[x*columns+y-1]);
+			result = min (result, matrixResult[x*columns+y-1]);
 		}
 		if(matrixData[x*columns+y+1] == matrixData[x*columns+y])
 		{
-			result = min (result, matrixResultCopy[x*columns+y+1]);
+			result = min (result, matrixResult[x*columns+y+1]);
 		}
 
 		// Si el indice no ha cambiado retorna 0
@@ -74,7 +74,6 @@ int main (int argc, char* argv[])
 	int columns =-1;
 	char *matrixData=NULL;
 	int *matrixResult=NULL;
-	int *matrixResultCopy=NULL;
 	int numBlocks=-1;
 
 
@@ -149,8 +148,7 @@ int main (int argc, char* argv[])
 
 	/* 3. Etiquetado inicial */
 	matrixResult= (int *)malloc( (rows)*(columns) * sizeof(int) );
-	matrixResultCopy= (int *)malloc( (rows)*(columns) * sizeof(int) );
-	if ( (matrixResult == NULL)  || (matrixResultCopy == NULL)  ) {
+	if ( matrixResult == NULL  ) {
  		perror ("Error reservando memoria");
 	   	return -1;
 	}
@@ -174,21 +172,11 @@ int main (int argc, char* argv[])
 	while(flagCambio !=0){
 		flagCambio=0;
 
-		/* 4.2.1 Actualizacion copia */
-		#pragma omp parallel for shared(matrixResult, matrixResultCopy,columns, rows), private(i, j), default(none)
-		for(i=1;i<rows-1;i++){
-			for(j=1;j<columns-1;j++){
-				if(matrixResult[i*(columns)+j]!=-1){
-					matrixResultCopy[i*(columns)+j]=matrixResult[i*(columns)+j];
-				}
-			}
-		}
-
 		/* 4.2.2 Computo y detecto si ha habido cambios */
-		#pragma omp parallel for shared(matrixData, matrixResult, matrixResultCopy,columns, rows), private(i, j), reduction(+:flagCambio), default(none)
+		#pragma omp parallel for shared(matrixData, matrixResult,columns, rows), private(i, j), reduction(+:flagCambio), default(none)
 		for(i=1;i<rows-1;i++){
 			for(j=1;j<columns-1;j++){
-				flagCambio = computation(i,j,columns, matrixData, matrixResult, matrixResultCopy) || flagCambio;
+				flagCambio = computation(i,j,columns, matrixData, matrixResult) || flagCambio;
 			}
 		}
 
@@ -239,6 +227,5 @@ int main (int argc, char* argv[])
 	/* 6. Liberacion de memoria */
 	free(matrixData);
 	free(matrixResult);
-	free(matrixResultCopy);
 
 }
