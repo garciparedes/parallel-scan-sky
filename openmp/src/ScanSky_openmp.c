@@ -26,38 +26,32 @@
 /**
 * Funcion secuencial para la busqueda de mi bloque
 */
-int computation(int x, int y, int columns, char* matrixData, int *matrixResult){
-
-	if( matrixResult[x*columns+y]!= -1){
-		// Inicialmente cojo mi indice
-		int result=matrixResult[x*columns+y];
-
+int computation(int x, int y, int columns, char* matrixData, int *matrixResult, int *matrixResultCopy){
+	// Inicialmente cojo mi indice
+	int result=matrixResultCopy[x*columns+y];
+	if( result!= -1){
 		//Si es de mi mismo grupo, entonces actualizo
 		if(matrixData[(x-1)*columns+y] == matrixData[x*columns+y])
 		{
-			matrixResult[x*columns+y] = min (matrixResult[x*columns+y], matrixResult[(x-1)*columns+y]);
-			matrixResult[(x-1)*columns+y] = matrixResult[x*columns+y];
+			result = min (result, matrixResultCopy[(x-1)*columns+y]);
 		}
 		if(matrixData[(x+1)*columns+y] == matrixData[x*columns+y])
 		{
-			matrixResult[x*columns+y] = min (matrixResult[x*columns+y], matrixResult[(x+1)*columns+y]);
-			matrixResult[(x+1)*columns+y] = matrixResult[x*columns+y];
+			result = min (result, matrixResultCopy[(x+1)*columns+y]);
 		}
 		if(matrixData[x*columns+y-1] == matrixData[x*columns+y])
 		{
-			matrixResult[x*columns+y] = min (matrixResult[x*columns+y], matrixResult[x*columns+y-1]);
-			matrixResult[x*columns+y-1] = matrixResult[x*columns+y];
+			result = min (result, matrixResultCopy[x*columns+y-1]);
 		}
 		if(matrixData[x*columns+y+1] == matrixData[x*columns+y])
 		{
-			matrixResult[x*columns+y] = min (matrixResult[x*columns+y], matrixResult[x*columns+y+1]);
-			matrixResult[x*columns+y+1] = matrixResult[x*columns+y];
+			result = min (result, matrixResultCopy[x*columns+y+1]);
 		}
 
 		// Si el indice no ha cambiado retorna 0
 		if(matrixResult[x*columns+y] == result){ return 0; }
 		// Si el indice cambia, actualizo matrix de resultados con el indice adecuado y retorno 1
-		else { return 1;}
+		else { matrixResult[x*columns+y]=result; return 1;}
 
 	}
 	return 0;
@@ -80,6 +74,7 @@ int main (int argc, char* argv[])
 	int columns =-1;
 	char *matrixData=NULL;
 	int *matrixResult=NULL;
+	int *matrixResultCopy=NULL;
 	int numBlocks=-1;
 
 
@@ -154,18 +149,20 @@ int main (int argc, char* argv[])
 
 	/* 3. Etiquetado inicial */
 	matrixResult= (int *)malloc( (rows)*(columns) * sizeof(int) );
-	if ( matrixResult == NULL  ) {
+	matrixResultCopy= (int *)malloc( (rows)*(columns) * sizeof(int) );
+	if ( (matrixResult == NULL)  || (matrixResultCopy == NULL)  ) {
  		perror ("Error reservando memoria");
 	   	return -1;
 	}
 
 	#pragma omp parallel for \
-	shared(matrixData, matrixResult, columns, rows), private(i, j), \
-	default(none), schedule(static)
+	shared(matrixData, matrixResult, matrixResultCopy, columns, rows), \
+	private(i, j), default(none), schedule(static)
 	for(i=0;i< rows; i++){
 		for(j=0;j< columns; j++){
 			if(matrixData[i*(columns)+j]!=0){
 				matrixResult[i*(columns)+j]=i*(columns)+j;
+				matrixResultCopy[i*(columns)+j]=i*(columns)+j;
 			} else {
 				matrixResult[i*(columns)+j]=-1;
 			}
@@ -182,11 +179,16 @@ int main (int argc, char* argv[])
 
 		/* 4.2.2 Computo y detecto si ha habido cambios */
 		#pragma omp parallel for \
-		shared(matrixData, matrixResult,columns, rows), private(i, j), \
-		reduction(||:flagCambio), default(none), schedule(static)
+		shared(matrixData, matrixResult,columns, rows, matrixResultCopy), \
+		private(i, j), reduction(||:flagCambio), default(none), schedule(static)
 		for(i=1;i<rows-1;i = i+1){
-			for(j=1+((i+1)%2);j<columns-1;j = j+2){
-				flagCambio = computation(i,j,columns, matrixData, matrixResult) || flagCambio;
+			for(j=1/*+((i+1)%2)*/;j<columns-1;j = j+1){
+				if(matrixResult[i*(columns)+j]!=-1){
+					flagCambio = computation(i,j,columns, matrixData, matrixResult, matrixResultCopy) || flagCambio;
+
+					#pragma omp atomic write
+					matrixResultCopy[i*(columns)+j]=matrixResult[i*(columns)+j];
+				}
 			}
 		}
 
@@ -239,5 +241,6 @@ int main (int argc, char* argv[])
 	/* 6. Liberacion de memoria */
 	free(matrixData);
 	free(matrixResult);
+	free(matrixResultCopy);
 
 }
