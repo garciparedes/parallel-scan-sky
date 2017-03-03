@@ -15,7 +15,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include "cputils.h"
-
+#include <omp.h>
 
 /* Substituir min por el operador */
 #define min(x,y)    ((x) < (y)? (x) : (y))
@@ -151,12 +151,16 @@ int main (int argc, char* argv[])
  		perror ("Error reservando memoria");
 	   	return -1;
 	}
+	#pragma omp parallel for \
+	shared(matrixData, matrixResult, columns, rows, matrixResultCopy), \
+	private(i, j), default(none), schedule(static)
 	for(i=0;i< rows; i++){
 		for(j=0;j< columns; j++){
-			matrixResult[i*(columns)+j]=-1;
 			// Si es 0 se trata del fondo y no lo computamos
 			if(matrixData[i*(columns)+j]!=0){
 				matrixResult[i*(columns)+j]=i*(columns)+j;
+			} else {
+				matrixResult[i*(columns)+j]=-1;
 			}
 		}
 	}
@@ -173,6 +177,9 @@ int main (int argc, char* argv[])
 		flagCambio=0;
 
 		/* 4.2.1 Actualizacion copia */
+		#pragma omp parallel for \
+		shared(matrixResult, matrixResultCopy, columns, rows ), \
+		private(i, j), default(none), schedule(static)
 		for(i=1;i<rows-1;i++){
 			for(j=1;j<columns-1;j++){
 				if(matrixResult[i*(columns)+j]!=-1){
@@ -182,9 +189,13 @@ int main (int argc, char* argv[])
 		}
 
 		/* 4.2.2 Computo y detecto si ha habido cambios */
+		#pragma omp parallel for \
+		shared(matrixData, matrixResult, columns, rows, matrixResultCopy), \
+		private(i, j), reduction(||:flagCambio), default(none), schedule(static)
 		for(i=1;i<rows-1;i++){
 			for(j=1;j<columns-1;j++){
-				flagCambio= flagCambio+ computation(i,j,columns, matrixData, matrixResult, matrixResultCopy);
+				flagCambio = computation(i,j,columns, matrixData,
+					matrixResult, matrixResultCopy) || flagCambio;
 			}
 		}
 
@@ -202,6 +213,9 @@ int main (int argc, char* argv[])
 
 	/* 4.3 Inicio cuenta del numero de bloques */
 	numBlocks=0;
+	#pragma omp parallel for \
+	shared(matrixResult,columns, rows), \
+	private(i, j), reduction(+:numBlocks), default(none), schedule(static)
 	for(i=1;i<rows-1;i++){
 		for(j=1;j<columns-1;j++){
 			if(matrixResult[i*columns+j] == i*columns+j) numBlocks++;
