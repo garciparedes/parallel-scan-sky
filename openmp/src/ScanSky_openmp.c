@@ -26,7 +26,8 @@
 /**
 * Funcion secuencial para la busqueda de mi bloque
 */
-int computation(int x, int y, int columns, char* matrixData, int *matrixResult, int *matrixResultCopy){
+int computation(int x, int y, int columns, char* matrixData, int *matrixResult,
+		int *matrixResultCopy) {
 	// Inicialmente cojo mi indice
 	int result=matrixResultCopy[x*columns+y];
 	if( result!= -1){
@@ -50,7 +51,8 @@ int computation(int x, int y, int columns, char* matrixData, int *matrixResult, 
 
 		// Si el indice no ha cambiado retorna 0
 		if(matrixResult[x*columns+y] == result){ return 0; }
-		// Si el indice cambia, actualizo matrix de resultados con el indice adecuado y retorno 1
+		// Si el indice cambia, actualizo matrix de resultados con el indice
+		// adecuado y retorno 1
 		else { matrixResult[x*columns+y]=result; return 1;}
 
 	}
@@ -177,14 +179,15 @@ int main (int argc, char* argv[])
 	while(flagCambio !=0){
 		flagCambio=0;
 
-		/* 4.2.2 Computo y detecto si ha habido cambios */
+		/* 4.2.1 Actualizacion copia y 4.2.2 Computo y detecto si ha habido cambios */
 		#pragma omp parallel for \
 		shared(matrixData, matrixResult,columns, rows, matrixResultCopy), \
 		private(i, j), reduction(||:flagCambio), default(none), schedule(static)
 		for(i=1;i<rows-1;i = i+1){
 			for(j=1/*+((i+1)%2)*/;j<columns-1;j = j+1){
 				if(matrixResult[i*(columns)+j]!=-1){
-					flagCambio = computation(i,j,columns, matrixData, matrixResult, matrixResultCopy) || flagCambio;
+					flagCambio = computation(i,j,columns, matrixData,
+							matrixResult, matrixResultCopy) || flagCambio;
 
 					#pragma omp atomic write
 					matrixResultCopy[i*(columns)+j]=matrixResult[i*(columns)+j];
