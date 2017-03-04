@@ -18,14 +18,13 @@
 #include <omp.h>
 
 
-#define CHUNK_S 512
 /* Substituir min por el operador */
 #define min(x,y)    ((x) < (y)? (x) : (y))
 
 /**
 * Funcion secuencial para la busqueda de mi bloque
 */
-int computation(int x, int y, int columns, int* matrixData, int *matrixResult, int *matrixResultCopy){
+int computation(int x, int y, int columns, char* matrixData, int *matrixResult, int *matrixResultCopy){
 	// Inicialmente cojo mi indice
 	int result=matrixResultCopy[x*columns+y];
 	if( result!= -1){
@@ -71,7 +70,7 @@ int main (int argc, char* argv[])
 
 	int rows=-1;
 	int columns =-1;
-	int *matrixData=NULL;
+	char *matrixData=NULL;
 	int *matrixResult=NULL;
 	int *matrixResultCopy=NULL;
 	int numBlocks=-1;
@@ -99,7 +98,7 @@ int main (int argc, char* argv[])
 	columns = columns+2;
 
 	/* 2.3 Reservo la memoria necesaria para la matriz de datos */
-	matrixData= (int *)malloc( rows*(columns) * sizeof(int) );
+	matrixData= (char *)malloc( rows*(columns) * sizeof(char) );
 	if ( matrixData == NULL ) {
  		perror ("Error reservando memoria");
 	   	return -1;
@@ -146,9 +145,6 @@ int main (int argc, char* argv[])
 // EL CODIGO A PARALELIZAR COMIENZA AQUI
 //
 
-	omp_set_schedule(omp_sched_static, CHUNK_S);
-
-
 	/* 3. Etiquetado inicial */
 	matrixResult= (int *)malloc( (rows)*(columns) * sizeof(int) );
 	matrixResultCopy= (int *)malloc( (rows)*(columns) * sizeof(int) );
@@ -156,9 +152,12 @@ int main (int argc, char* argv[])
  		perror ("Error reservando memoria");
 	   	return -1;
 	}
+
 	#pragma omp parallel for \
-	shared(matrixData, matrixResult, matrixResultCopy, columns, rows), \
-	private(i, j), default(none)
+ 	default(none), \
+	schedule(static), \
+	shared(matrixData, matrixResult, columns, rows), \
+ 	private(i, j)
 	for(i=0;i< rows; i++){
 		for(j=0;j< columns; j++){
 			// Si es 0 se trata del fondo y no lo computamos
@@ -171,20 +170,19 @@ int main (int argc, char* argv[])
 	}
 
 
-
-	/* 4. Computacion */
-	int t=0;
 	/* 4.1 Flag para ver si ha habido cambios y si se continua la ejecucion */
-	int flagCambio=1;
+	char flagCambio=1;
 
 	/* 4.2 Busqueda de los bloques similiares */
-	for(t=0; flagCambio !=0; t++){
+	while(flagCambio !=0){
 		flagCambio=0;
 
 		/* 4.2.1 Actualizacion copia */
 		#pragma omp parallel for \
-		shared(matrixResult, matrixResultCopy, columns, rows ), \
-		private(i, j), default(none)
+		default(none), \
+		schedule(static), \
+		shared(matrixResult, matrixResultCopy,columns, rows), \
+		private(i, j)
 		for(i=1;i<rows-1;i++){
 			for(j=1;j<columns-1;j++){
 				if(matrixResult[i*(columns)+j]!=-1){
@@ -195,8 +193,11 @@ int main (int argc, char* argv[])
 
 		/* 4.2.2 Computo y detecto si ha habido cambios */
 		#pragma omp parallel for \
-		shared(matrixData, matrixResult, columns, rows, matrixResultCopy), \
-		private(i, j), reduction(||:flagCambio), default(none)
+		default(none), \
+		schedule(static), \
+		shared(matrixData, matrixResult, matrixResultCopy,columns, rows), \
+		private(i, j), \
+		reduction(+:flagCambio)
 		for(i=1;i<rows-1;i++){
 			for(j=1;j<columns-1;j++){
 				flagCambio = computation(i,j,columns, matrixData,
@@ -205,7 +206,6 @@ int main (int argc, char* argv[])
 		}
 
 		#ifdef DEBUG
-			printf("\nResultados iter %d: \n", t);
 			for(i=0;i<rows;i++){
 				for(j=0;j<columns;j++){
 					printf ("%d\t", matrixResult[i*columns+j]);
@@ -219,8 +219,11 @@ int main (int argc, char* argv[])
 	/* 4.3 Inicio cuenta del numero de bloques */
 	numBlocks=0;
 	#pragma omp parallel for \
+	default(none), \
+	schedule(static)\
 	shared(matrixResult,columns, rows), \
-	private(i, j), reduction(+:numBlocks), default(none)
+	private(i, j), \
+	reduction(+:numBlocks)
 	for(i=1;i<rows-1;i++){
 		for(j=1;j<columns-1;j++){
 			if(matrixResult[i*columns+j] == i*columns+j) numBlocks++;
