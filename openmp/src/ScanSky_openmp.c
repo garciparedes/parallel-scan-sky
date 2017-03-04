@@ -17,6 +17,8 @@
 #include "cputils.h"
 #include <omp.h>
 
+
+#define CHUNK_S 512
 /* Substituir min por el operador */
 #define min(x,y)    ((x) < (y)? (x) : (y))
 
@@ -144,16 +146,25 @@ int main (int argc, char* argv[])
 // EL CODIGO A PARALELIZAR COMIENZA AQUI
 //
 
+	omp_set_schedule(omp_sched_static, CHUNK_S);
+
+
 	/* 3. Etiquetado inicial */
-	matrixResult= (int *)malloc( (rows)*(columns) * sizeof(int) );
-	matrixResultCopy= (int *)malloc( (rows)*(columns) * sizeof(int) );
+	#pragma omp parallel sections default(none), shared(matrixResult, matrixResultCopy, rows, columns)
+	{
+		#pragma omp section
+		matrixResult= (int *)malloc( (rows)*(columns) * sizeof(int) );
+
+		#pragma omp section
+		matrixResultCopy= (int *)malloc( (rows)*(columns) * sizeof(int) );
+	}
 	if ( (matrixResult == NULL)  || (matrixResultCopy == NULL)  ) {
  		perror ("Error reservando memoria");
 	   	return -1;
 	}
 	#pragma omp parallel for \
-	shared(matrixData, matrixResult, columns, rows, matrixResultCopy), \
-	private(i, j), default(none), schedule(static)
+	shared(matrixData, matrixResult, matrixResultCopy, columns, rows), \
+	private(i, j), default(none)
 	for(i=0;i< rows; i++){
 		for(j=0;j< columns; j++){
 			// Si es 0 se trata del fondo y no lo computamos
@@ -179,7 +190,7 @@ int main (int argc, char* argv[])
 		/* 4.2.1 Actualizacion copia */
 		#pragma omp parallel for \
 		shared(matrixResult, matrixResultCopy, columns, rows ), \
-		private(i, j), default(none), schedule(static)
+		private(i, j), default(none)
 		for(i=1;i<rows-1;i++){
 			for(j=1;j<columns-1;j++){
 				if(matrixResult[i*(columns)+j]!=-1){
@@ -191,7 +202,7 @@ int main (int argc, char* argv[])
 		/* 4.2.2 Computo y detecto si ha habido cambios */
 		#pragma omp parallel for \
 		shared(matrixData, matrixResult, columns, rows, matrixResultCopy), \
-		private(i, j), reduction(||:flagCambio), default(none), schedule(static)
+		private(i, j), reduction(||:flagCambio), default(none)
 		for(i=1;i<rows-1;i++){
 			for(j=1;j<columns-1;j++){
 				flagCambio = computation(i,j,columns, matrixData,
@@ -215,7 +226,7 @@ int main (int argc, char* argv[])
 	numBlocks=0;
 	#pragma omp parallel for \
 	shared(matrixResult,columns, rows), \
-	private(i, j), reduction(+:numBlocks), default(none), schedule(static)
+	private(i, j), reduction(+:numBlocks), default(none)
 	for(i=1;i<rows-1;i++){
 		for(j=1;j<columns-1;j++){
 			if(matrixResult[i*columns+j] == i*columns+j) numBlocks++;
