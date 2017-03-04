@@ -150,14 +150,8 @@ int main (int argc, char* argv[])
 
 
 	/* 3. Etiquetado inicial */
-	#pragma omp parallel sections default(none), shared(matrixResult, matrixResultCopy, rows, columns)
-	{
-		#pragma omp section
-		matrixResult= (int *)malloc( (rows)*(columns) * sizeof(int) );
-
-		#pragma omp section
-		matrixResultCopy= (int *)malloc( (rows)*(columns) * sizeof(int) );
-	}
+	matrixResult= (int *)malloc( (rows)*(columns) * sizeof(int) );
+	matrixResultCopy= (int *)malloc( (rows)*(columns) * sizeof(int) );
 	if ( (matrixResult == NULL)  || (matrixResultCopy == NULL)  ) {
  		perror ("Error reservando memoria");
 	   	return -1;
