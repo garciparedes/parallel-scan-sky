@@ -1,20 +1,20 @@
 # parallel-scan-sky
-### [tablón uva](http://frontendv.infor.uva.es/)
+- [tablón uva](http://frontendv.infor.uva.es/)
 
 ## openmp
 
-- ### Usage:
+- Usage:
 ```
 cd openmp/src
 ./run.sh ../../data-sets/circles1.data
 ```
 
-- ### Docs:
+- Docs:
 [Article](openmp/article/article.pdf)
 
 ## secuential
 
-### Usage:
+- Usage:
 
 ```
 cd secuential/src
