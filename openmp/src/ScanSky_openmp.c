@@ -24,7 +24,7 @@
 /**
 * Funcion secuencial para la busqueda de mi bloque
 */
-int computation(int x, int y, int columns, char* matrixData, int *matrixResult, int *matrixResultCopy){
+int computation(int x, int y, int columns, int* matrixData, int *matrixResult, int *matrixResultCopy){
 	// Inicialmente cojo mi indice
 	int result=matrixResultCopy[x*columns+y];
 	if( result!= -1){
@@ -70,10 +70,12 @@ int main (int argc, char* argv[])
 
 	int rows=-1;
 	int columns =-1;
-	char *matrixData=NULL;
+	int *matrixData=NULL;
 	int *matrixResult=NULL;
 	int *matrixResultCopy=NULL;
 	int numBlocks=-1;
+
+	int *aux_indexer=NULL;
 
 
 
@@ -98,7 +100,7 @@ int main (int argc, char* argv[])
 	columns = columns+2;
 
 	/* 2.3 Reservo la memoria necesaria para la matriz de datos */
-	matrixData= (char *)malloc( rows*(columns) * sizeof(char) );
+	matrixData= (int *)malloc( rows*(columns) * sizeof(int) );
 	if ( matrixData == NULL ) {
  		perror ("Error reservando memoria");
 	   	return -1;
@@ -148,27 +150,44 @@ int main (int argc, char* argv[])
 	/* 3. Etiquetado inicial */
 	matrixResult= (int *)malloc( (rows)*(columns) * sizeof(int) );
 	matrixResultCopy= (int *)malloc( (rows)*(columns) * sizeof(int) );
+	aux_indexer = (int *)malloc( (rows)*(columns) * sizeof(int) );
 	if ( (matrixResult == NULL)  || (matrixResultCopy == NULL)  ) {
  		perror ("Error reservando memoria");
 	   	return -1;
 	}
+	
+	#pragma omp parallel for
+	for(j=0;j< columns; j++){
+		matrixResult[j]=-1;
+	}
 
-	#pragma omp parallel for \
- 	default(none), \
-	schedule(static), \
-	shared(matrixData, matrixResult, columns, rows), \
- 	private(i, j)
+	#pragma omp parallel for
+	for(j=0;j< columns; j++){
+		matrixResult[(rows-1)*(columns)+j]=-1;
+	}
+
+	#pragma omp parallel for
 	for(i=0;i< rows; i++){
 		for(j=0;j< columns; j++){
+			matrixResult[i*(columns)]=-1;
+			matrixResult[i*(columns)+columns-1]=-1;
+		}
+	}
+
+
+	int	k, k_max = 0;
+	for(i=1;i< rows-1; i++){
+		for(j=1;j< columns-1; j++){
 			// Si es 0 se trata del fondo y no lo computamos
 			if(matrixData[i*(columns)+j]!=0){
 				matrixResult[i*(columns)+j]=i*(columns)+j;
+				aux_indexer[k] = i*(columns)+j;
+				k_max++;
 			} else {
 				matrixResult[i*(columns)+j]=-1;
 			}
 		}
 	}
-
 
 	/* 4.1 Flag para ver si ha habido cambios y si se continua la ejecucion */
 	char flagCambio=1;
@@ -181,28 +200,21 @@ int main (int argc, char* argv[])
 		#pragma omp parallel for \
 		default(none), \
 		schedule(static), \
-		shared(matrixResult, matrixResultCopy,columns, rows), \
-		private(i, j)
-		for(i=1;i<rows-1;i++){
-			for(j=1;j<columns-1;j++){
-				if(matrixResult[i*(columns)+j]!=-1){
-					matrixResultCopy[i*(columns)+j]=matrixResult[i*(columns)+j];
-				}
-			}
+		shared(aux_indexer, k_max, matrixResult, matrixResultCopy), \
+		private(k)
+		for(k=0;k<k_max;k++){
+			matrixResultCopy[aux_indexer[k]]=matrixResult[aux_indexer[k]];
 		}
 
 		/* 4.2.2 Computo y detecto si ha habido cambios */
 		#pragma omp parallel for \
 		default(none), \
 		schedule(static), \
-		shared(matrixData, matrixResult, matrixResultCopy,columns, rows), \
-		private(i, j), \
+		shared(aux_indexer, k_max, matrixData, matrixResult, matrixResultCopy,columns), \
 		reduction(+:flagCambio)
-		for(i=1;i<rows-1;i++){
-			for(j=1;j<columns-1;j++){
-				flagCambio = computation(i,j,columns, matrixData,
-					matrixResult, matrixResultCopy) || flagCambio;
-			}
+		for(k=0;k<k_max;k++){
+			flagCambio = computation(aux_indexer[k]/columns, aux_indexer[k] % columns,
+					columns, matrixData,matrixResult, matrixResultCopy) || flagCambio;
 		}
 
 		#ifdef DEBUG
@@ -221,13 +233,11 @@ int main (int argc, char* argv[])
 	#pragma omp parallel for \
 	default(none), \
 	schedule(static)\
-	shared(matrixResult,columns, rows), \
-	private(i, j), \
+	shared(aux_indexer, k_max, matrixResult), \
+	private(k),\
 	reduction(+:numBlocks)
-	for(i=1;i<rows-1;i++){
-		for(j=1;j<columns-1;j++){
-			if(matrixResult[i*columns+j] == i*columns+j) numBlocks++;
-		}
+	for(k=0;k<k_max;k++){
+		if(matrixResult[aux_indexer[k]] == aux_indexer[k]) numBlocks++;
 	}
 
 //
@@ -258,5 +268,5 @@ int main (int argc, char* argv[])
 	free(matrixData);
 	free(matrixResult);
 	free(matrixResultCopy);
-
+	free(aux_indexer);
 }
