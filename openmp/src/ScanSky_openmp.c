@@ -2,10 +2,12 @@
 * Contar cuerpos celestes
 *
 * Asignatura Computación Paralela (Grado Ingeniería Informática)
-* Código secuencial base
+* Código openmp
 *
+* @author Sergio García Prado
+* @author Adrián Calvo Rojo
 * @author Ana Moretón Fernández
-* @version v1.2
+* @version v2.0
 *
 * (c) 2017, Grupo Trasgo, Universidad de Valladolid
 */
@@ -74,9 +76,6 @@ int main (int argc, char* argv[])
 	int *matrixResult=NULL;
 	int *matrixResultCopy=NULL;
 	int numBlocks=-1;
-
-	int *aux_indexer=NULL;
-
 
 
 	/* 2. Leer Fichero de entrada e inicializar datos */
@@ -147,41 +146,45 @@ int main (int argc, char* argv[])
 // EL CODIGO A PARALELIZAR COMIENZA AQUI
 //
 
+
 	/* 3. Etiquetado inicial */
 	matrixResult= (int *)malloc( (rows)*(columns) * sizeof(int) );
 	matrixResultCopy= (int *)malloc( (rows)*(columns) * sizeof(int) );
-	aux_indexer = (int *)malloc( (rows)*(columns) * sizeof(int) );
+
+	int k, k_max = 0;
+	int *k_indexer = (int *)malloc( (rows)*(columns) * sizeof(int) );
 	if ( (matrixResult == NULL)  || (matrixResultCopy == NULL)  ) {
  		perror ("Error reservando memoria");
 	   	return -1;
 	}
-	
-	#pragma omp parallel for
-	for(j=0;j< columns; j++){
-		matrixResult[j]=-1;
-	}
 
-	#pragma omp parallel for
-	for(j=0;j< columns; j++){
-		matrixResult[(rows-1)*(columns)+j]=-1;
-	}
-
-	#pragma omp parallel for
-	for(i=0;i< rows; i++){
+	#pragma omp parallel
+	{
+		#pragma omp for
 		for(j=0;j< columns; j++){
-			matrixResult[i*(columns)]=-1;
-			matrixResult[i*(columns)+columns-1]=-1;
+			matrixResult[j]=-1;
+		}
+
+		#pragma omp for
+		for(j=0;j< columns; j++){
+			matrixResult[(rows-1)*(columns)+j]=-1;
+		}
+
+		#pragma omp for
+		for(i=0;i< rows; i++){
+			for(j=0;j< columns; j++){
+				matrixResult[i*(columns)]=-1;
+				matrixResult[i*(columns)+columns-1]=-1;
+			}
 		}
 	}
 
-
-	int k, k_max = 0;
 	for(i=1;i< rows-1; i++){
 		for(j=1;j< columns-1; j++){
 			// Si es 0 se trata del fondo y no lo computamos
 			if(matrixData[i*(columns)+j]!=0){
 				matrixResult[i*(columns)+j]=i*(columns)+j;
-				aux_indexer[k_max] = i*(columns)+j;
+				k_indexer[k_max] = i*(columns)+j;
 				k_max++;
 			} else {
 				matrixResult[i*(columns)+j]=-1;
@@ -200,20 +203,20 @@ int main (int argc, char* argv[])
 		#pragma omp parallel for \
 		default(none), \
 		schedule(static), \
-		shared(aux_indexer, k_max, matrixResult, matrixResultCopy), \
+		shared(k_indexer, k_max, matrixResult, matrixResultCopy), \
 		private(k)
 		for(k=0;k<k_max;k++){
-			matrixResultCopy[aux_indexer[k]]=matrixResult[aux_indexer[k]];
+			matrixResultCopy[k_indexer[k]]=matrixResult[k_indexer[k]];
 		}
 
 		/* 4.2.2 Computo y detecto si ha habido cambios */
 		#pragma omp parallel for \
 		default(none), \
 		schedule(static), \
-		shared(aux_indexer, k_max, matrixData, matrixResult, matrixResultCopy,columns), \
+		shared(k_indexer, k_max, matrixData, matrixResult, matrixResultCopy,columns), \
 		reduction(+:flagCambio)
 		for(k=0;k<k_max;k++){
-			flagCambio = computation(aux_indexer[k]/columns, aux_indexer[k] % columns,
+			flagCambio = computation(k_indexer[k]/columns, k_indexer[k] % columns,
 					columns, matrixData,matrixResult, matrixResultCopy) || flagCambio;
 		}
 
@@ -233,11 +236,11 @@ int main (int argc, char* argv[])
 	#pragma omp parallel for \
 	default(none), \
 	schedule(static)\
-	shared(aux_indexer, k_max, matrixResult), \
+	shared(k_indexer, k_max, matrixResult), \
 	private(k),\
 	reduction(+:numBlocks)
 	for(k=0;k<k_max;k++){
-		if(matrixResult[aux_indexer[k]] == aux_indexer[k]) numBlocks++;
+		if(matrixResult[k_indexer[k]] == k_indexer[k]) numBlocks++;
 	}
 
 //
@@ -268,5 +271,5 @@ int main (int argc, char* argv[])
 	free(matrixData);
 	free(matrixResult);
 	free(matrixResultCopy);
-	free(aux_indexer);
+	free(k_indexer);
 }
