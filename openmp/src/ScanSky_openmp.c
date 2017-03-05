@@ -153,17 +153,17 @@ int main (int argc, char* argv[])
 
 	#pragma omp parallel
 	{
-		#pragma omp for
+		#pragma omp for nowait
 		for(j=0;j< columns; j++){
 			matrixResult[j]=-1;
 		}
 
-		#pragma omp for
+		#pragma omp for nowait
 		for(j=0;j< columns; j++){
 			matrixResult[(rows-1)*(columns)+j]=-1;
 		}
 
-		#pragma omp for
+		#pragma omp for nowait
 		for(i=0;i< rows; i++){
 			for(j=0;j< columns; j++){
 				matrixResult[i*(columns)]=-1;
