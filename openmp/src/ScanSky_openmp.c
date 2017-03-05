@@ -28,21 +28,21 @@
 */
 int computation(int x, int y, int columns, int* matrixData, int *matrixResult, int *matrixResultCopy){
 	// Inicialmente cojo mi indice
-	if((matrixResult[x*columns+y] != matrixResultCopy[(x-1)*columns+y]) && (matrixData[(x-1)*columns+y] == matrixData[x*columns+y]))
+	if((matrixResult[x*columns+y] > matrixResultCopy[(x-1)*columns+y]) && (matrixData[(x-1)*columns+y] == matrixData[x*columns+y]))
 	{
-		matrixResult[x*columns+y] = min (matrixResult[x*columns+y], matrixResultCopy[(x-1)*columns+y]);
+		matrixResult[x*columns+y] = matrixResultCopy[(x-1)*columns+y];
 	}
-	if((matrixResult[x*columns+y] != matrixResultCopy[(x+1)*columns+y]) && (matrixData[(x+1)*columns+y] == matrixData[x*columns+y]))
+	if((matrixResult[x*columns+y] > matrixResultCopy[(x+1)*columns+y]) && (matrixData[(x+1)*columns+y] == matrixData[x*columns+y]))
 	{
-		matrixResult[x*columns+y] = min (matrixResult[x*columns+y], matrixResultCopy[(x+1)*columns+y]);
+		matrixResult[x*columns+y] = matrixResultCopy[(x+1)*columns+y];
 	}
-	if((matrixResult[x*columns+y] != matrixResultCopy[x*columns+y-1]) && (matrixData[x*columns+y-1] == matrixData[x*columns+y]))
+	if((matrixResult[x*columns+y] > matrixResultCopy[x*columns+y-1]) && (matrixData[x*columns+y-1] == matrixData[x*columns+y]))
 	{
-		matrixResult[x*columns+y] = min (matrixResult[x*columns+y], matrixResultCopy[x*columns+y-1]);
+		matrixResult[x*columns+y] = matrixResultCopy[x*columns+y-1];
 	}
-	if((matrixResult[x*columns+y] != matrixResultCopy[x*columns+y+1]) && (matrixData[x*columns+y+1] == matrixData[x*columns+y]))
+	if((matrixResult[x*columns+y] > matrixResultCopy[x*columns+y+1]) && (matrixData[x*columns+y+1] == matrixData[x*columns+y]))
 	{
-		matrixResult[x*columns+y] = min (matrixResult[x*columns+y], matrixResultCopy[x*columns+y+1]);
+		matrixResult[x*columns+y] = matrixResultCopy[x*columns+y+1];
 	}
 
 	// Si el indice no ha cambiado retorna 0
