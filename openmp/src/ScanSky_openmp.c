@@ -175,13 +175,13 @@ int main (int argc, char* argv[])
 	}
 
 
-	int	k, k_max = 0;
+	int k, k_max = 0;
 	for(i=1;i< rows-1; i++){
 		for(j=1;j< columns-1; j++){
 			// Si es 0 se trata del fondo y no lo computamos
 			if(matrixData[i*(columns)+j]!=0){
 				matrixResult[i*(columns)+j]=i*(columns)+j;
-				aux_indexer[k] = i*(columns)+j;
+				aux_indexer[k_max] = i*(columns)+j;
 				k_max++;
 			} else {
 				matrixResult[i*(columns)+j]=-1;
