@@ -113,8 +113,8 @@ int main (int argc, char* argv[])
 	matrixResult= (int *)malloc( (rows)*(columns) * sizeof(int) );
 	matrixResultCopy= (int *)malloc( (rows)*(columns) * sizeof(int) );
 
-	int x, y, k, k_max = 0;
-	int *k_indexer = (int *)malloc( (rows)*(columns) * sizeof(int) );
+	int k, k_max = 0;
+	int *k_indexer = (int *)malloc( (rows-1)*(columns-1) * sizeof(int) );
 	if ( (matrixResult == NULL)  || (matrixResultCopy == NULL)  ) {
  		perror ("Error reservando memoria");
 	   	return -1;
@@ -187,18 +187,16 @@ int main (int argc, char* argv[])
 		default(none), \
 		schedule(static), \
 		shared(k_indexer, k_max, matrixData, matrixResult, matrixResultCopy,columns), \
-		reduction(||:flagCambio), private(x, y)
+		reduction(||:flagCambio), private(k)
 		for(k=0;k<k_max;k++){
-			x = k_indexer[k]/columns, y = k_indexer[k] % columns;
-
-			if((matrixData[(x-1)*columns+y] == matrixData[k_indexer[k]]) && (matrixResult[k_indexer[k]] > matrixResultCopy[(x-1)*columns+y]))
+			if((matrixData[k_indexer[k]-columns] == matrixData[k_indexer[k]]) && (matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]-columns]))
 			{
-				matrixResult[k_indexer[k]] = matrixResultCopy[(x-1)*columns+y];
+				matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]-columns];
 				flagCambio = 1;
 			}
-			if((matrixData[(x+1)*columns+y] == matrixData[k_indexer[k]]) && (matrixResult[k_indexer[k]] > matrixResultCopy[(x+1)*columns+y]))
+			if((matrixData[k_indexer[k]+columns] == matrixData[k_indexer[k]]) && (matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]+columns]))
 			{
-				matrixResult[k_indexer[k]] = matrixResultCopy[(x+1)*columns+y];
+				matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]+columns];
 				flagCambio = 1;
 			}
 			if((matrixData[k_indexer[k]-1] == matrixData[k_indexer[k]]) && (matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]-1]))
