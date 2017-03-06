@@ -120,19 +120,30 @@ int main (int argc, char* argv[])
 	   	return -1;
 	}
 
-	#pragma omp parallel
+	#pragma omp parallel \
+	default(none), \
+	shared(matrixResult, columns, rows)
 	{
-		#pragma omp for nowait
+		#pragma omp for \
+		nowait,\
+		schedule(static), \
+		private(j)
 		for(j=0;j< columns; j++){
 			matrixResult[j]=-1;
 		}
 
-		#pragma omp for nowait
+		#pragma omp for \
+		nowait,\
+		schedule(static), \
+		private(j)
 		for(j=0;j< columns; j++){
 			matrixResult[(rows-1)*(columns)+j]=-1;
 		}
 
-		#pragma omp for nowait
+		#pragma omp for \
+		nowait,\
+		schedule(static), \
+		private(i, j)
 		for(i=0;i< rows; i++){
 			for(j=0;j< columns; j++){
 				matrixResult[i*(columns)]=-1;
