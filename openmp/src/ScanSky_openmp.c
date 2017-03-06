@@ -19,37 +19,6 @@
 #include "cputils.h"
 #include <omp.h>
 
-
-/* Substituir min por el operador */
-#define min(x,y)    ((x) < (y)? (x) : (y))
-
-/**
-* Funcion secuencial para la busqueda de mi bloque
-*/
-int computation(int x, int y, int columns, int* matrixData, int *matrixResult, int *matrixResultCopy){
-	// Inicialmente cojo mi indice
-	if((matrixResult[x*columns+y] > matrixResultCopy[(x-1)*columns+y]) && (matrixData[(x-1)*columns+y] == matrixData[x*columns+y]))
-	{
-		matrixResult[x*columns+y] = matrixResultCopy[(x-1)*columns+y];
-	}
-	if((matrixResult[x*columns+y] > matrixResultCopy[(x+1)*columns+y]) && (matrixData[(x+1)*columns+y] == matrixData[x*columns+y]))
-	{
-		matrixResult[x*columns+y] = matrixResultCopy[(x+1)*columns+y];
-	}
-	if((matrixResult[x*columns+y] > matrixResultCopy[x*columns+y-1]) && (matrixData[x*columns+y-1] == matrixData[x*columns+y]))
-	{
-		matrixResult[x*columns+y] = matrixResultCopy[x*columns+y-1];
-	}
-	if((matrixResult[x*columns+y] > matrixResultCopy[x*columns+y+1]) && (matrixData[x*columns+y+1] == matrixData[x*columns+y]))
-	{
-		matrixResult[x*columns+y] = matrixResultCopy[x*columns+y+1];
-	}
-
-	// Si el indice no ha cambiado retorna 0
-	if(matrixResult[x*columns+y] != matrixResultCopy[x*columns+y]){ return 1; }
-	return 0;
-}
-
 /**
 * Funcion principal
 */
@@ -144,7 +113,7 @@ int main (int argc, char* argv[])
 	matrixResult= (int *)malloc( (rows)*(columns) * sizeof(int) );
 	matrixResultCopy= (int *)malloc( (rows)*(columns) * sizeof(int) );
 
-	int k, k_max = 0;
+	int x, y, k, k_max = 0;
 	int *k_indexer = (int *)malloc( (rows)*(columns) * sizeof(int) );
 	if ( (matrixResult == NULL)  || (matrixResultCopy == NULL)  ) {
  		perror ("Error reservando memoria");
@@ -207,10 +176,30 @@ int main (int argc, char* argv[])
 		default(none), \
 		schedule(static), \
 		shared(k_indexer, k_max, matrixData, matrixResult, matrixResultCopy,columns), \
-		reduction(+:flagCambio)
+		reduction(||:flagCambio), private(x, y)
 		for(k=0;k<k_max;k++){
-			flagCambio = computation(k_indexer[k]/columns, k_indexer[k] % columns,
-					columns, matrixData,matrixResult, matrixResultCopy) || flagCambio;
+			x = k_indexer[k]/columns, y = k_indexer[k] % columns;
+
+			if((matrixData[(x-1)*columns+y] == matrixData[k_indexer[k]]) && (matrixResult[k_indexer[k]] > matrixResultCopy[(x-1)*columns+y]))
+			{
+				matrixResult[k_indexer[k]] = matrixResultCopy[(x-1)*columns+y];
+				flagCambio = 1;
+			}
+			if((matrixData[(x+1)*columns+y] == matrixData[k_indexer[k]]) && (matrixResult[k_indexer[k]] > matrixResultCopy[(x+1)*columns+y]))
+			{
+				matrixResult[k_indexer[k]] = matrixResultCopy[(x+1)*columns+y];
+				flagCambio = 1;
+			}
+			if((matrixData[k_indexer[k]-1] == matrixData[k_indexer[k]]) && (matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]-1]))
+			{
+				matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]-1];
+				flagCambio = 1;
+			}
+			if((matrixData[k_indexer[k]+1] == matrixData[k_indexer[k]]) && (matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]+1]))
+			{
+				matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]+1];
+				flagCambio = 1;
+			}
 		}
 
 		#ifdef DEBUG
