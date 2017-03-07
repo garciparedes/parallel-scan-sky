@@ -122,8 +122,37 @@ int main (int argc, char* argv[])
 
 	#pragma omp parallel \
 	default(none), \
-	shared(matrixResult, columns, rows)
+	shared(matrixData, k_max, k_indexer, matrixResult, columns, rows)
 	{
+		#pragma omp single \
+		nowait\
+		private(i,j)
+		{
+			for(i=1;i< rows-1; i++){
+				for(j=1;j< columns-1; j++){
+					// Si es 0 se trata del fondo y no lo computamos
+					if(matrixData[i*(columns)+j]!=0){
+						matrixResult[i*(columns)+j]=i*(columns)+j;
+						k_indexer[k_max] = i*(columns)+j;
+						k_max++;
+					} else {
+						matrixResult[i*(columns)+j]=-1;
+					}
+				}
+			}
+		}
+
+		#pragma omp for \
+		nowait,\
+		schedule(static), \
+		private(i, j)
+		for(i=0;i< rows; i++){
+			for(j=0;j< columns; j++){
+				matrixResult[i*(columns)]=-1;
+				matrixResult[i*(columns)+columns-1]=-1;
+			}
+		}
+
 		#pragma omp for \
 		nowait,\
 		schedule(static), \
@@ -139,31 +168,8 @@ int main (int argc, char* argv[])
 		for(j=0;j< columns; j++){
 			matrixResult[(rows-1)*(columns)+j]=-1;
 		}
-
-		#pragma omp for \
-		nowait,\
-		schedule(static), \
-		private(i, j)
-		for(i=0;i< rows; i++){
-			for(j=0;j< columns; j++){
-				matrixResult[i*(columns)]=-1;
-				matrixResult[i*(columns)+columns-1]=-1;
-			}
-		}
 	}
 
-	for(i=1;i< rows-1; i++){
-		for(j=1;j< columns-1; j++){
-			// Si es 0 se trata del fondo y no lo computamos
-			if(matrixData[i*(columns)+j]!=0){
-				matrixResult[i*(columns)+j]=i*(columns)+j;
-				k_indexer[k_max] = i*(columns)+j;
-				k_max++;
-			} else {
-				matrixResult[i*(columns)+j]=-1;
-			}
-		}
-	}
 
 	/* 4.1 Flag para ver si ha habido cambios y si se continua la ejecucion */
 	char flagCambio=1;
