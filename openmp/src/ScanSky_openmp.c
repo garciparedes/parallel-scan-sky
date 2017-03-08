@@ -150,7 +150,7 @@ int main (int argc, char* argv[])
 
 		#pragma omp for \
 		nowait,\
-		schedule(dynamic, rows/omp_get_num_threads()), \
+		schedule(dynamic, ((rows-1)*(columns-1))/omp_get_num_threads()), \
 		private(i)
 		for(i=0;i< rows; i++){
 			matrixResult[i*(columns)]=-1;
@@ -159,7 +159,7 @@ int main (int argc, char* argv[])
 
 		#pragma omp for \
 		nowait,\
-		schedule(dynamic, columns/omp_get_num_threads()), \
+		schedule(dynamic, ((rows-1)*(columns-1))/omp_get_num_threads()), \
 		private(j)
 		for(j=0;j< columns; j++){
 			matrixResult[j]=-1;
@@ -167,7 +167,7 @@ int main (int argc, char* argv[])
 
 		#pragma omp for \
 		nowait,\
-		schedule(dynamic, columns/omp_get_num_threads()), \
+		schedule(dynamic, ((rows-1)*(columns-1))/omp_get_num_threads()), \
 		private(j)
 		for(j=0;j< columns; j++){
 			matrixResult[(rows-1)*(columns)+j]=-1;
