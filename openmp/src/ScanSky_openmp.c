@@ -80,7 +80,7 @@ int main (int argc, char* argv[])
 	}
 	for(i=1;i<columns-1;i++){
 		matrixData[0*(columns)+i]=0;
-		matrixData[(columns-1)*(columns)+i]=0;
+		matrixData[(rows-1)*(columns)+i]=0;
 	}
 	/* 2.6 Relleno la matriz con los datos del fichero */
 	for(i=1;i<rows-1;i++){
@@ -124,27 +124,31 @@ int main (int argc, char* argv[])
 	default(none), \
 	shared(matrixData, k_max, k_indexer, matrixResult, columns, rows)
 	{
-		#pragma omp single \
-		nowait\
-		private(i,j)
-		{
-			for(i=1;i< rows-1; i++){
-				for(j=1;j< columns-1; j++){
-					// Si es 0 se trata del fondo y no lo computamos
-					if(matrixData[i*(columns)+j]!=0){
-						matrixResult[i*(columns)+j]=i*(columns)+j;
-						k_indexer[k_max] = i*(columns)+j;
-						k_max++;
-					} else {
-						matrixResult[i*(columns)+j]=-1;
+		#pragma omp for \
+		nowait,\
+		schedule(dynamic, ((rows-1)*(columns-1))/omp_get_num_threads()), \
+		private(i,j,k)
+		for(i=1;i< rows-1; i++){
+			for(j=1;j< columns-1; j++){
+				// Si es 0 se trata del fondo y no lo computamos
+				if(matrixData[i*(columns)+j]!=0){
+					matrixResult[i*(columns)+j]=i*(columns)+j;
+					#pragma omp atomic capture
+					{
+						k = k_max; k_max++;
 					}
+					k_indexer[k] = i*(columns)+j;
+				} else {
+					matrixResult[i*(columns)+j]=-1;
 				}
 			}
 		}
 
+
 		#pragma omp for \
 		nowait,\
-		schedule(static), \
+		schedule(dynamic, (rows*columns)/omp_get_num_threads()), \
+		collapse(2),\
 		private(i, j)
 		for(i=0;i< rows; i++){
 			for(j=0;j< columns; j++){
@@ -155,7 +159,7 @@ int main (int argc, char* argv[])
 
 		#pragma omp for \
 		nowait,\
-		schedule(static), \
+		schedule(dynamic, columns/omp_get_num_threads()), \
 		private(j)
 		for(j=0;j< columns; j++){
 			matrixResult[j]=-1;
@@ -163,7 +167,7 @@ int main (int argc, char* argv[])
 
 		#pragma omp for \
 		nowait,\
-		schedule(static), \
+		schedule(dynamic, columns/omp_get_num_threads()), \
 		private(j)
 		for(j=0;j< columns; j++){
 			matrixResult[(rows-1)*(columns)+j]=-1;
