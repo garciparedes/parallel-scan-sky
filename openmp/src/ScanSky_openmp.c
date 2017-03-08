@@ -39,6 +39,8 @@ int main (int argc, char* argv[])
 	int *matrixResultCopy=NULL;
 	int numBlocks=-1;
 
+	int k=-1, k_max=-1;
+	int *k_indexer=NULL;
 
 	/* 2. Leer Fichero de entrada e inicializar datos */
 
@@ -113,13 +115,14 @@ int main (int argc, char* argv[])
 	matrixResult= (int *)malloc( (rows)*(columns) * sizeof(int) );
 	matrixResultCopy= (int *)malloc( (rows)*(columns) * sizeof(int) );
 
-	int k, k_max = 0;
-	int *k_indexer = (int *)malloc( (rows-1)*(columns-1) * sizeof(int) );
-	if ( (matrixResult == NULL)  || (matrixResultCopy == NULL)  ) {
+	k_indexer = (int *)malloc( (rows-1)*(columns-1) * sizeof(int) );
+
+	if ( (matrixResult == NULL)  || (matrixResultCopy == NULL) || (k_indexer == NULL)  ) {
  		perror ("Error reservando memoria");
 	   	return -1;
 	}
 
+	k_max = 0;
 	#pragma omp parallel \
 	default(none), \
 	shared(matrixData, k_max, k_indexer, matrixResult, columns, rows)
@@ -147,14 +150,11 @@ int main (int argc, char* argv[])
 
 		#pragma omp for \
 		nowait,\
-		schedule(dynamic, (rows*columns)/omp_get_num_threads()), \
-		collapse(2),\
-		private(i, j)
+		schedule(dynamic, rows/omp_get_num_threads()), \
+		private(i)
 		for(i=0;i< rows; i++){
-			for(j=0;j< columns; j++){
-				matrixResult[i*(columns)]=-1;
-				matrixResult[i*(columns)+columns-1]=-1;
-			}
+			matrixResult[i*(columns)]=-1;
+			matrixResult[i*(columns)+columns-1]=-1;
 		}
 
 		#pragma omp for \
@@ -236,7 +236,7 @@ int main (int argc, char* argv[])
 	numBlocks=0;
 	#pragma omp parallel for \
 	default(none), \
-	schedule(static)\
+	schedule(static), \
 	shared(k_indexer, k_max, matrixResult), \
 	private(k),\
 	reduction(+:numBlocks)
