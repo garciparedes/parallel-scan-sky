@@ -150,7 +150,7 @@ int main (int argc, char* argv[])
 
 		#pragma omp for \
 		nowait,\
-		schedule(dynamic, ((rows-1)*(columns-1))/omp_get_num_threads()), \
+		schedule(static), \
 		private(i)
 		for(i=0;i< rows; i++){
 			matrixResult[i*(columns)]=-1;
@@ -159,7 +159,7 @@ int main (int argc, char* argv[])
 
 		#pragma omp for \
 		nowait,\
-		schedule(dynamic, ((rows-1)*(columns-1))/omp_get_num_threads()), \
+		schedule(static), \
 		private(j)
 		for(j=0;j< columns; j++){
 			matrixResult[j]=-1;
@@ -167,7 +167,7 @@ int main (int argc, char* argv[])
 
 		#pragma omp for \
 		nowait,\
-		schedule(dynamic, ((rows-1)*(columns-1))/omp_get_num_threads()), \
+		schedule(static), \
 		private(j)
 		for(j=0;j< columns; j++){
 			matrixResult[(rows-1)*(columns)+j]=-1;
@@ -182,45 +182,47 @@ int main (int argc, char* argv[])
 	while(flagCambio !=0){
 		flagCambio=0;
 
-		/* 4.2.1 Actualizacion copia */
-		#pragma omp parallel for \
-		default(none), \
-		schedule(static), \
-		shared(k_indexer, k_max, matrixResult, matrixResultCopy), \
-		private(k)
-		for(k=0;k<k_max;k++){
-			matrixResultCopy[k_indexer[k]]=matrixResult[k_indexer[k]];
-		}
 
-		/* 4.2.2 Computo y detecto si ha habido cambios */
-		#pragma omp parallel for \
+		#pragma omp parallel \
 		default(none), \
-		schedule(static), \
-		shared(k_indexer, k_max, matrixData, matrixResult, matrixResultCopy,columns), \
-		reduction(||:flagCambio), private(k)
-		for(k=0;k<k_max;k++){
-			if((matrixData[k_indexer[k]-columns] == matrixData[k_indexer[k]]) && (matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]-columns]))
-			{
-				matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]-columns];
-				flagCambio = 1;
+		shared(k_indexer, k_max, matrixData, matrixResult, matrixResultCopy,columns, flagCambio)
+		{
+			/* 4.2.1 Actualizacion copia */
+			#pragma omp for \
+			schedule(static), \
+			private(k)
+			for(k=0;k<k_max;k++){
+				matrixResultCopy[k_indexer[k]]=matrixResult[k_indexer[k]];
 			}
-			if((matrixData[k_indexer[k]+columns] == matrixData[k_indexer[k]]) && (matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]+columns]))
-			{
-				matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]+columns];
-				flagCambio = 1;
-			}
-			if((matrixData[k_indexer[k]-1] == matrixData[k_indexer[k]]) && (matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]-1]))
-			{
-				matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]-1];
-				flagCambio = 1;
-			}
-			if((matrixData[k_indexer[k]+1] == matrixData[k_indexer[k]]) && (matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]+1]))
-			{
-				matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]+1];
-				flagCambio = 1;
+
+			/* 4.2.2 Computo y detecto si ha habido cambios */
+			#pragma omp for \
+			schedule(static), \
+			reduction(||:flagCambio),\
+			private(k)
+			for(k=0;k<k_max;k++){
+				if((matrixData[k_indexer[k]-columns] == matrixData[k_indexer[k]]) && (matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]-columns]))
+				{
+					matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]-columns];
+					flagCambio = 1;
+				}
+				if((matrixData[k_indexer[k]+columns] == matrixData[k_indexer[k]]) && (matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]+columns]))
+				{
+					matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]+columns];
+					flagCambio = 1;
+				}
+				if((matrixData[k_indexer[k]-1] == matrixData[k_indexer[k]]) && (matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]-1]))
+				{
+					matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]-1];
+					flagCambio = 1;
+				}
+				if((matrixData[k_indexer[k]+1] == matrixData[k_indexer[k]]) && (matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]+1]))
+				{
+					matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]+1];
+					flagCambio = 1;
+				}
 			}
 		}
-
 		#ifdef DEBUG
 			for(i=0;i<rows;i++){
 				for(j=0;j<columns;j++){
