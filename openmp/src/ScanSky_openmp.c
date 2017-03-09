@@ -41,8 +41,7 @@ int main (int argc, char* argv[])
 
 	int k=-1, k_max=-1;
 	int *k_indexer=NULL;
-	int r;
-	char flagCambio;
+
 	/* 2. Leer Fichero de entrada e inicializar datos */
 
 	/* 2.1 Abrir fichero */
@@ -177,7 +176,7 @@ int main (int argc, char* argv[])
 
 
 	/* 4.1 Flag para ver si ha habido cambios y si se continua la ejecucion */
-	flagCambio=1;
+	char flagCambio=1;
 
 	/* 4.2 Busqueda de los bloques similiares */
 	while(flagCambio !=0){
@@ -200,30 +199,28 @@ int main (int argc, char* argv[])
 			#pragma omp for \
 			schedule(static), \
 			reduction(||:flagCambio),\
-			private(k,r)
+			private(k)
 			for(k=0;k<k_max;k++){
-				r = matrixResult[k_indexer[k]];
-				if((matrixData[k_indexer[k]-columns] == matrixData[k_indexer[k]]) && (r > matrixResultCopy[k_indexer[k]-columns]))
+				if((matrixData[k_indexer[k]-columns] == matrixData[k_indexer[k]]) && (matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]-columns]))
 				{
-					r = matrixResultCopy[k_indexer[k]-columns];
+					matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]-columns];
 					flagCambio = 1;
 				}
-				if((matrixData[k_indexer[k]+columns] == matrixData[k_indexer[k]]) && (r > matrixResultCopy[k_indexer[k]+columns]))
+				if((matrixData[k_indexer[k]+columns] == matrixData[k_indexer[k]]) && (matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]+columns]))
 				{
-					r = matrixResultCopy[k_indexer[k]+columns];
+					matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]+columns];
 					flagCambio = 1;
 				}
-				if((matrixData[k_indexer[k]-1] == matrixData[k_indexer[k]]) && (r > matrixResultCopy[k_indexer[k]-1]))
+				if((matrixData[k_indexer[k]-1] == matrixData[k_indexer[k]]) && (matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]-1]))
 				{
-					r = matrixResultCopy[k_indexer[k]-1];
+					matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]-1];
 					flagCambio = 1;
 				}
-				if((matrixData[k_indexer[k]+1] == matrixData[k_indexer[k]]) && (r > matrixResultCopy[k_indexer[k]+1]))
+				if((matrixData[k_indexer[k]+1] == matrixData[k_indexer[k]]) && (matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]+1]))
 				{
-					r = matrixResultCopy[k_indexer[k]+1];
+					matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]+1];
 					flagCambio = 1;
 				}
-				matrixResult[k_indexer[k]] = r;
 			}
 		}
 		#ifdef DEBUG
