@@ -161,15 +161,8 @@ int main (int argc, char* argv[])
 		nowait,\
 		schedule(static), \
 		private(j)
-		for(j=0;j< columns; j++){
+		for(j=1;j< columns-1; j++){
 			matrixResult[j]=-1;
-		}
-
-		#pragma omp for \
-		nowait,\
-		schedule(static), \
-		private(j)
-		for(j=0;j< columns; j++){
 			matrixResult[(rows-1)*(columns)+j]=-1;
 		}
 	}
