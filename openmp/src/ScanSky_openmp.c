@@ -113,13 +113,6 @@ int main (int argc, char* argv[])
 //
 
 
-	/*
-	if ( (matrixResult == NULL)  || (matrixResultCopy == NULL) || (k_indexer == NULL)  ) {
- 		perror ("Error reservando memoria");
-	   	return -1;
-	}
-	*/
-
 	#pragma omp parallel \
 	default(none), \
 	shared(k_indexer, k_max, matrixData, matrixResult, \
@@ -132,6 +125,11 @@ int main (int argc, char* argv[])
 			matrixResultCopy = (int *)malloc( (rows)*(columns) * sizeof(int) );
 			k_indexer = (int *)malloc( (rows-1)*(columns-1) * sizeof(int) );
 			k_max = 0;
+
+			if ( (matrixResult == NULL)  || (matrixResultCopy == NULL) || (k_indexer == NULL)  ) {
+				perror ("Error reservando memoria");
+				//return -1;
+			}
 		}
 
 		#pragma omp for \
