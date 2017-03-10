@@ -42,6 +42,8 @@ int main (int argc, char* argv[])
 	int k=-1, k_max=-1;
 	int *k_indexer=NULL;
 
+	char flagCambio =-1;
+
 	/* 2. Leer Fichero de entrada e inicializar datos */
 
 	/* 2.1 Abrir fichero */
@@ -111,22 +113,27 @@ int main (int argc, char* argv[])
 //
 
 
-	/* 3. Etiquetado inicial */
-	matrixResult= (int *)malloc( (rows)*(columns) * sizeof(int) );
-	matrixResultCopy= (int *)malloc( (rows)*(columns) * sizeof(int) );
-
-	k_indexer = (int *)malloc( (rows-1)*(columns-1) * sizeof(int) );
-
+	/*
 	if ( (matrixResult == NULL)  || (matrixResultCopy == NULL) || (k_indexer == NULL)  ) {
  		perror ("Error reservando memoria");
 	   	return -1;
 	}
+	*/
 
-	k_max = 0;
 	#pragma omp parallel \
 	default(none), \
-	shared(matrixData, k_max, k_indexer, matrixResult, columns, rows)
+	shared(k_indexer, k_max, matrixData, matrixResult, \
+		matrixResultCopy,columns,rows, flagCambio,numBlocks)
 	{
+		/* 3. Etiquetado inicial */
+		#pragma omp single
+		{
+			matrixResult = (int *)malloc( (rows)*(columns) * sizeof(int) );
+			matrixResultCopy = (int *)malloc( (rows)*(columns) * sizeof(int) );
+			k_indexer = (int *)malloc( (rows-1)*(columns-1) * sizeof(int) );
+			k_max = 0;
+		}
+
 		#pragma omp for \
 		nowait,\
 		schedule(dynamic, ((rows-1)*(columns-1))/omp_get_num_threads()), \
@@ -165,21 +172,15 @@ int main (int argc, char* argv[])
 			matrixResult[j]=-1;
 			matrixResult[(rows-1)*(columns)+j]=-1;
 		}
-	}
 
 
-	/* 4.1 Flag para ver si ha habido cambios y si se continua la ejecucion */
-	char flagCambio=1;
+		/* 4.2 Busqueda de los bloques similiares */
+		do {
+			#pragma omp barrier
 
-	/* 4.2 Busqueda de los bloques similiares */
-	while(flagCambio !=0){
-		flagCambio=0;
+			#pragma omp single
+			flagCambio=0;
 
-
-		#pragma omp parallel \
-		default(none), \
-		shared(k_indexer, k_max, matrixData, matrixResult, matrixResultCopy,columns, flagCambio)
-		{
 			/* 4.2.1 Actualizacion copia */
 			#pragma omp for \
 			schedule(static), \
@@ -194,49 +195,59 @@ int main (int argc, char* argv[])
 			reduction(||:flagCambio),\
 			private(k)
 			for(k=0;k<k_max;k++){
-				if((matrixData[k_indexer[k]-columns] == matrixData[k_indexer[k]]) && (matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]-columns]))
+				if((matrixData[k_indexer[k]-columns] == matrixData[k_indexer[k]]) &&
+					(matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]-columns]))
 				{
 					matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]-columns];
 					flagCambio = 1;
 				}
-				if((matrixData[k_indexer[k]+columns] == matrixData[k_indexer[k]]) && (matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]+columns]))
+				if((matrixData[k_indexer[k]+columns] == matrixData[k_indexer[k]]) &&
+					(matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]+columns]))
 				{
 					matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]+columns];
 					flagCambio = 1;
 				}
-				if((matrixData[k_indexer[k]-1] == matrixData[k_indexer[k]]) && (matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]-1]))
+				if((matrixData[k_indexer[k]-1] == matrixData[k_indexer[k]]) &&
+					(matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]-1]))
 				{
 					matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]-1];
 					flagCambio = 1;
 				}
-				if((matrixData[k_indexer[k]+1] == matrixData[k_indexer[k]]) && (matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]+1]))
+				if((matrixData[k_indexer[k]+1] == matrixData[k_indexer[k]]) &&
+					(matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]+1]))
 				{
 					matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]+1];
 					flagCambio = 1;
 				}
 			}
-		}
-		#ifdef DEBUG
-			for(i=0;i<rows;i++){
-				for(j=0;j<columns;j++){
-					printf ("%d\t", matrixResult[i*columns+j]);
+
+
+			#ifdef DEBUG
+				#pragma omp for \
+				schedule(static), \
+				ordered,\
+				private(i,j)
+				for(i=0;i<rows;i++){
+					for(j=0;j<columns;j++){
+						printf ("%d\t", matrixResult[i*columns+j]);
+					}
+					printf("\n");
 				}
-				printf("\n");
-			}
-		#endif
+			#endif
+		} while(flagCambio !=0);
 
-	}
 
-	/* 4.3 Inicio cuenta del numero de bloques */
-	numBlocks=0;
-	#pragma omp parallel for \
-	default(none), \
-	schedule(static), \
-	shared(k_indexer, k_max, matrixResult), \
-	private(k),\
-	reduction(+:numBlocks)
-	for(k=0;k<k_max;k++){
-		if(matrixResult[k_indexer[k]] == k_indexer[k]) numBlocks++;
+		/* 4.3 Inicio cuenta del numero de bloques */
+		#pragma omp single
+		numBlocks=0;
+
+		#pragma omp for \
+		schedule(static), \
+		private(k),\
+		reduction(+:numBlocks)
+		for(k=0;k<k_max;k++){
+			if(matrixResult[k_indexer[k]] == k_indexer[k]) numBlocks++;
+		}
 	}
 
 //
