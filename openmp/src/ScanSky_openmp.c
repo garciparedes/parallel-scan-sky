@@ -41,7 +41,7 @@ int main (int argc, char* argv[])
 
 	int k=-1, k_max=-1;
 	int *k_indexer=NULL;
-
+	int *temp=NULL;
 	char flagCambio =-1;
 
 	/* 2. Leer Fichero de entrada e inicializar datos */
@@ -115,8 +115,8 @@ int main (int argc, char* argv[])
 
 	#pragma omp parallel \
 	default(none), \
-	shared(k_indexer, k_max, matrixData, matrixResult, \
-		matrixResultCopy,columns,rows, flagCambio,numBlocks)
+	shared(k_indexer, k_max, matrixData, matrixResult, temp, \
+		matrixResultCopy, columns,rows, flagCambio,numBlocks)
 	{
 		/* 3. Etiquetado inicial */
 		#pragma omp single
@@ -169,15 +169,13 @@ int main (int argc, char* argv[])
 		do {
 			#pragma omp barrier
 
-			#pragma omp single
-			flagCambio=0;
-
 			/* 4.2.1 Actualizacion copia */
-			#pragma omp for \
-			schedule(static), \
-			private(k)
-			for(k=0;k<k_max;k++){
-				matrixResultCopy[k_indexer[k]]=matrixResult[k_indexer[k]];
+			#pragma omp single
+			{
+				flagCambio=0;
+				temp = matrixResultCopy;
+				matrixResultCopy = matrixResult;
+				matrixResult = temp;
 			}
 
 			/* 4.2.2 Computo y detecto si ha habido cambios */
@@ -186,6 +184,7 @@ int main (int argc, char* argv[])
 			reduction(||:flagCambio),\
 			private(k)
 			for(k=0;k<k_max;k++){
+				matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]];
 				if((matrixData[k_indexer[k]-columns] == matrixData[k_indexer[k]]) &&
 					(matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]-columns]))
 				{
