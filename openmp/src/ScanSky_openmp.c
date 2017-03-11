@@ -125,6 +125,7 @@ int main (int argc, char* argv[])
 			matrixResultCopy = (int *)malloc( (rows)*(columns) * sizeof(int) );
 			k_indexer = (int *)malloc( (rows-1)*(columns-1) * sizeof(int) );
 			k_max = 0;
+			numBlocks=0;
 
 			if ( (matrixResult == NULL)  || (matrixResultCopy == NULL) || (k_indexer == NULL)  ) {
 				perror ("Error reservando memoria");
@@ -228,11 +229,8 @@ int main (int argc, char* argv[])
 
 
 		/* 4.3 Inicio cuenta del numero de bloques */
-		#pragma omp single
-		numBlocks=0;
-
 		#pragma omp for \
-		schedule(static), \
+		schedule(dynamic, k_max/omp_get_num_threads()), \
 		private(k),\
 		reduction(+:numBlocks)
 		for(k=0;k<k_max;k++){
