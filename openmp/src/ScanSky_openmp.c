@@ -164,10 +164,11 @@ int main (int argc, char* argv[])
 			matrixResult[(rows-1)*(columns)+j]=-1;
 		}
 
+		#pragma omp barrier
 
+		
 		/* 4.2 Busqueda de los bloques similiares */
 		do {
-			#pragma omp barrier
 
 			/* 4.2.1 Actualizacion copia */
 			#pragma omp single
@@ -180,36 +181,67 @@ int main (int argc, char* argv[])
 
 			/* 4.2.2 Computo y detecto si ha habido cambios */
 			#pragma omp for \
-			schedule(static), \
+			schedule(dynamic, k_max/omp_get_num_threads()), \
 			reduction(||:flagCambio),\
+			nowait, \
 			private(k)
 			for(k=0;k<k_max;k++){
 				matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]];
 				if((matrixData[k_indexer[k]-columns] == matrixData[k_indexer[k]]) &&
 					(matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]-columns]))
 				{
+					#pragma omp atomic update
 					matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]-columns];
 					flagCambio = 1;
 				}
+			}
+			
+			#pragma omp for \
+			schedule(dynamic, k_max/omp_get_num_threads()), \
+			nowait, \
+			reduction(||:flagCambio),\
+			private(k)
+			for(k=0;k<k_max;k++){
 				if((matrixData[k_indexer[k]+columns] == matrixData[k_indexer[k]]) &&
 					(matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]+columns]))
 				{
+					#pragma omp atomic update
 					matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]+columns];
 					flagCambio = 1;
 				}
+			}
+			
+			#pragma omp for \
+			schedule(dynamic, k_max/omp_get_num_threads()), \
+			nowait, \
+			reduction(||:flagCambio),\
+			private(k)
+			for(k=0;k<k_max;k++){
 				if((matrixData[k_indexer[k]-1] == matrixData[k_indexer[k]]) &&
 					(matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]-1]))
 				{
+					#pragma omp atomic update
 					matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]-1];
 					flagCambio = 1;
 				}
+			}
+
+			#pragma omp for \
+			schedule(dynamic, k_max/omp_get_num_threads()), \
+			nowait, \
+			reduction(||:flagCambio),\
+			private(k)
+			for(k=0;k<k_max;k++){
 				if((matrixData[k_indexer[k]+1] == matrixData[k_indexer[k]]) &&
 					(matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]+1]))
 				{
+					#pragma omp atomic update
 					matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]+1];
 					flagCambio = 1;
 				}
 			}
+			
+			#pragma omp barrier
 
 
 			#ifdef DEBUG
