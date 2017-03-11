@@ -1,6 +1,8 @@
 
 # Created by https://www.gitignore.io/api/c,c++,cuda,windows,linux,osx,latex
 
+/**/client
+
 ScanSky_*
 !ScanSky_*.c
 

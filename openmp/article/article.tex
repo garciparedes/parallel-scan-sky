@@ -1,0 +1,131 @@
+\documentclass[10pt, a4paper,spanish]{article}
+
+\usepackage{mystyle}
+\usepackage{myvars}
+
+
+
+%-----------------------------
+
+\begin{document}
+
+	\maketitle % Insert title
+
+	\thispagestyle{fancy} % All pages have headers and footers
+
+
+%-----------------------------
+%	ABSTRACT
+%-----------------------------
+
+	\begin{abstract}
+		\noindent En este documento se relatan el conjunto de mejoras aplicadas a un código base para obtener mejoras a nivel de rendimiento utilizando como medida el tiempo de ejecución. El modelo de paralelización utilizado para dicha tarea ha sido \emph{memoria compartida}, para lo cual se ha utilizado el framework \emph{OpenMp}\cite{tool:openmp} en su versión para el lenguaje de programación \emph{C}. El código fuente obtenido tras dichas optimizaciones se podrá consultar a través de \url{https://github.com/garciparedes/parallel-scan-sky/blob/master/openmp/src/ScanSky_openmp.c}\cite{code:parallel-scan-sky}
+	\end{abstract}
+
+%-----------------------------
+%	TEXT
+%-----------------------------
+
+
+	\section{Introducción}
+
+		\paragraph{}
+		En este documento se exponen el conjunto de mejoras realizadas sobre \say{un código secuencial para contar el número de objetos diferentes que se ven en una imagen o fotografía celeste, en general de espacio profundo, obtenida por un radiotelescopio}\cite{subject:cp}
+
+		\paragraph{}
+		\say{Las imágenes ya han sido procesadas, discretizando la luminosidad observada en cada punto en 16 diferentes niveles de grises o colores. Los pixels del fondo del espacio, una vez eliminado el ruido, tienen el índice de color 0. Los pixels de la imagen con una luminosidad o color suficientemente parecidos se representan con un mismo valor entre 1 y 15.}\cite{subject:cp}
+
+		\paragraph{}
+		\say{La imagen se carga en una matriz desde un fichero de texto plano. El fichero contiene un número entero en cada línea. Las dos primeras líneas contienen el número de filas y columnas de la imagen. El resto son números entre 0 y 15 con los valores de cada pixel, ordenados por filas.}\cite{subject:cp}
+
+		\paragraph{}
+		\say{Los pixels del mismo índice de color que están juntos, en horizontal o vertical (no en diagonal), se considera que son del mismo objeto. El programa etiqueta cada objeto de la imagen con una etiqueta diferente. Todos los pixels del mismo objeto tendrán la misma etiqueta. Para determinar el número de objetos, al final se cuentan el número de etiquetas diferentes. Los píxeles de índice 0 no se etiquetan.}\cite{subject:cp}
+
+	\section{Optimización}
+
+		\paragraph{}
+		A continuación se realiza una breve descripción acerca del conjunto de mejoras realizadas sobre el código secuencial base utilizado para la práctica. El \emph{framework} utilizado para llevar a cabo dichas técnicas de optimización paralela es \textbf{OpenMP}\cite{tool:openmp}. Este modelo se basa en la idea de \textbf{memoria compartida}, es decir, el espacio de direcciones es común para todos los hilos que se ejecuten de manera concurrente. Sin embargo, también se permite la reserva de zonas de memoria privada para cada elemento de proceso, de una forma similar a y como sucede en el caso de llamadas a funciones en las cuales se definen variables.
+
+
+		\paragraph{}
+		Lo primer a destacar en cuanto a las modificaciones realizadas en la implementación original es la definición de la región paralela, la cual se puede apreciar de manera resumida en la figura \ref{code:parallel_region}. Esta región del código abarca de comienzo a fin el conjunto de lineas de código cuyo tiempo de ejecución es registrado. En esta parte se puede apreciar que se ha decidido deshabilitar la compartición por defecto de variables compartidas, lo cual ofrece un mayor control a la vez que una casi inapreciable mejora de eficiencia en el proceso de inicialización de la región paralela.
+
+		\begin{figure}[H]
+			\centering
+			\inputminted{c}{./code/op_parallel_region.c}
+			\caption{Inicialización de la región paralela}
+			\label{code:parallel_region}
+		\end{figure}
+
+		\paragraph{}
+		Nótese que además de las variables existente anteriormente, se ha añadido una nueva estructura de datos llamada \emph{k\_indexer}, junto con un contador \emph{k\_max} que determina el número de elementos almacenados en la estructura. La utilidad de la misma es almacenar todas aquellas posiciones no nulas de la imagen de entrada, lo cual aporta grandes ventajas reduciendo en gran medida el número de comprobaciones innecesarias sobre dicha matriz.
+
+		\paragraph{}
+		En la figura \ref{code:op_1} se muestra el código modificado para la labor de inicializar los valores de la matriz de resultados (\emph{matrixResult}), la cual será utilizada durante el resto del programa. Puesto que dicha tarea presenta una naturaleza muy paralela, se ha decidido que su ejecución sea realizada de dicha manera. La carga no está balanceada debido tanto a los diferentes casos que pueden sucederse según el contenido de cada casilla, como a la necesidad de mantener el número de elementos almacenados en la estructura auxiliar \emph{k\_indexer}, que requiere que su contador de elementos se incremente en una zona de exclusión mutua. Por estas razones se cree que lo más conveniente es una planificación \textbf{dinámica} que a largo plazo consiga una estabilización en cuanto a la carga de trabajo asignada a cada hilo. Nótese que el bucle de rellenado de los bordes de las columnas (\emph{j's}) se ha extraido fuera del principal, lo que evita escrituras innecesarias. Debido a que no existen problemas de dependencias entre estos bucles, se ha eliminado la barrera de salida de los mismos a través de la directiva \emph{nowait}.
+
+		\begin{figure}[h]
+			\centering
+			\inputminted{c}{./code/op1.c}
+			\caption{Rellenado de la matriz de resultados, sobre la cual se desarrollará el cómputo.}
+			\label{code:op_1}
+		\end{figure}
+
+		\paragraph{}
+		Lo siguiente es un bucle \textbf{do-while} representado a través de un \textbf{for} en el código base, pero reescrito de dicha manera para mejorar la comprensión. Para conservar la semántica de ejecución de dicha directiva debido al paralelismo ha sido necesario añadir una barrera (\emph{barrier}) explicita al comienzo de la misma. Esto se ilustra de manera resumida en la figura \ref{code:op_do_while}.
+
+		\begin{figure}[H]
+			\centering
+			\inputminted{c}{./code/op-do-while.c}
+			\caption{Bucle Principal de Cómputo}
+			\label{code:op_do_while}
+		\end{figure}
+
+		\paragraph{}
+		El contenido del bucle de la figura \ref{code:op_do_while} se compone de dos partes bien diferenciadas, la primera de ellas destinada a actualizar una matriz de copia \emph{matrixResultCopy} sobre la matriz de resultados \emph{matrixResult} anteriormente citada. La segunda parte se corresponde con el algoritmo utilizado para detectar figuras distintas en la matriz.
+
+		\paragraph{}
+		En la figura \ref{code:op_2} se muestra la tarea de copia de la matriz de resultados, la cual se reduce a un simple cambio de referencias entre la matriz original y la de copia. Utilizando esta alternativa frente a la iterativa basada en asignar el mismo valor de cada posición de una matriz en otra se consigue una gran mejora de eficiencia.
+
+		\begin{figure}[H]
+			\centering
+			\inputminted{c}{./code/op2.c}
+			\caption{Copia de la Matriz de Resultados}
+			\label{code:op_2}
+		\end{figure}
+
+		\paragraph{}
+		La región de código de la figura \ref{code:op_3} muestra el resultado final tras varias optimizaciones sobre la misma. Nótese que se ha aplicado la técnica de \emph{inlining} eliminando la llamada a la función \emph{computacion()}, lo cual ha permitido una gran redución en cuanto al número de operaciones aritméticas para el cálculo de las posiciones en las que se debe comprobar casillas contiguas. En la figura \ref{code:op_3} tan solo se muestra uno de los casos por la semejanza con el resto. También se ha restringido el conjunto de valores que tomaba \emph{flagCambio} a una variable de tipo binario, lo cual elimina el coste de incrementar su valor. Por último, se ha comprobado que en esta sección de código se obtienen mejores resultados cuando la planificación del mismo es \textbf{estática} a pesar del gran número de condicionales y por consiguiente de desbalanceos de carga que se esperaría que sucedieran. La conclusión a la cual se ha llegado ha sido que debido al reducido coste de cada condición, otras estrategias más sofisticadas no han llegado a mostrar sus ventajas.
+
+		\begin{figure}[H]
+			\centering
+			\inputminted{c}{./code/op3.c}
+			\caption{Cómputo necesario para reconocer figuras diferentes en la matriz}
+			\label{code:op_3}
+		\end{figure}
+
+		\paragraph{}
+		La última sección del código, una vez que la matriz de resultados se encuentra estabilizada, no habiéndose producido modificaciones durante la anterior fase, es la de realizar el conteo del número de figuras distintas que contiene la matriz. Esto se ilustra en la figura \ref{code:op_4} Para ello se ha utilizado un bucle \textbf{for}, tal y como en el código base. Debido a la semejanza operacional de todas sus iteraciones, este se ha paralelizado teniendo una estrategia \textbf{estática}, la cual se cree que funciona mejor que otras por la misma razón que en el caso de la figura \ref{code:op_3}.
+
+		\begin{figure}[H]
+			\centering
+			\inputminted{c}{./code/op4.c}
+			\caption{Conteo del número de figuras diferentes}
+			\label{code:op_4}
+		\end{figure}
+
+	\section{Conclusiones}
+
+		\paragraph{}
+		La adaptación de código secuencial a paralelo puede ser una tarea compleja en un gran número de situaciones debido a la dificultad para conocer de manera clara y concisa cuáles son las zonas del código con mayor carga computacional, así como las dependencias que en la versión secuencial no surgen.
+
+		\paragraph{}
+		El modelo que propone \emph{OpenMP}\cite{tool:openmp} para el desarrollo de aplicaciones que utilicen paralelismo es una manera sencilla de obtener grandes ventajas a nivel de rendimiento, ya que en la mayoría de casos ofrece un elevado nivel de transparencia respecto de tareas de sincronización o interconexión de hilos.
+
+%-----------------------------
+%	Bibliographic references
+%-----------------------------
+	\nocite{subject:cp}
+  \bibliographystyle{acm}
+  \bibliography{bib/misc}
+
+\end{document}
