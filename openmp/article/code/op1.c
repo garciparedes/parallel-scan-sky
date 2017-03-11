@@ -1,3 +1,4 @@
+/* 3. Etiquetado inicial */
 #pragma omp for \
 nowait,\
 schedule(dynamic, ((rows-1)*(columns-1))/omp_get_num_threads()), \
