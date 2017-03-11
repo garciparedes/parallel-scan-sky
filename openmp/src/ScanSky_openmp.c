@@ -2,10 +2,12 @@
 * Contar cuerpos celestes
 *
 * Asignatura Computación Paralela (Grado Ingeniería Informática)
-* Código secuencial base
+* Código openmp
 *
+* @author Sergio García Prado
+* @author Adrián Calvo Rojo
 * @author Ana Moretón Fernández
-* @version v1.2
+* @version v2.0
 *
 * (c) 2017, Grupo Trasgo, Universidad de Valladolid
 */
@@ -15,44 +17,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include "cputils.h"
-
-
-/* Substituir min por el operador */
-#define min(x,y)    ((x) < (y)? (x) : (y))
-
-/**
-* Funcion secuencial para la busqueda de mi bloque
-*/
-int computation(int x, int y, int columns, int* matrixData, int *matrixResult, int *matrixResultCopy){
-	// Inicialmente cojo mi indice
-	int result=matrixResultCopy[x*columns+y];
-	if( result!= -1){
-		//Si es de mi mismo grupo, entonces actualizo
-		if(matrixData[(x-1)*columns+y] == matrixData[x*columns+y])
-		{
-			result = min (result, matrixResultCopy[(x-1)*columns+y]);
-		}
-		if(matrixData[(x+1)*columns+y] == matrixData[x*columns+y])
-		{
-			result = min (result, matrixResultCopy[(x+1)*columns+y]);
-		}
-		if(matrixData[x*columns+y-1] == matrixData[x*columns+y])
-		{
-			result = min (result, matrixResultCopy[x*columns+y-1]);
-		}
-		if(matrixData[x*columns+y+1] == matrixData[x*columns+y])
-		{
-			result = min (result, matrixResultCopy[x*columns+y+1]);
-		}
-
-		// Si el indice no ha cambiado retorna 0
-		if(matrixResult[x*columns+y] == result){ return 0; }
-		// Si el indice cambia, actualizo matrix de resultados con el indice adecuado y retorno 1
-		else { matrixResult[x*columns+y]=result; return 1;}
-
-	}
-	return 0;
-}
+#include <omp.h>
 
 /**
 * Funcion principal
@@ -74,7 +39,10 @@ int main (int argc, char* argv[])
 	int *matrixResultCopy=NULL;
 	int numBlocks=-1;
 
+	int k=-1, k_max=-1;
+	int *k_indexer=NULL;
 
+	char flagCambio =-1;
 
 	/* 2. Leer Fichero de entrada e inicializar datos */
 
@@ -116,7 +84,7 @@ int main (int argc, char* argv[])
 	}
 	for(i=1;i<columns-1;i++){
 		matrixData[0*(columns)+i]=0;
-		matrixData[(columns-1)*(columns)+i]=0;
+		matrixData[(rows-1)*(columns)+i]=0;
 	}
 	/* 2.6 Relleno la matriz con los datos del fichero */
 	for(i=1;i<rows-1;i++){
@@ -144,67 +112,129 @@ int main (int argc, char* argv[])
 // EL CODIGO A PARALELIZAR COMIENZA AQUI
 //
 
-	/* 3. Etiquetado inicial */
-	matrixResult= (int *)malloc( (rows)*(columns) * sizeof(int) );
-	matrixResultCopy= (int *)malloc( (rows)*(columns) * sizeof(int) );
-	if ( (matrixResult == NULL)  || (matrixResultCopy == NULL)  ) {
- 		perror ("Error reservando memoria");
-	   	return -1;
-	}
-	for(i=0;i< rows; i++){
-		for(j=0;j< columns; j++){
-			matrixResult[i*(columns)+j]=-1;
-			// Si es 0 se trata del fondo y no lo computamos
-			if(matrixData[i*(columns)+j]!=0){
-				matrixResult[i*(columns)+j]=i*(columns)+j;
+
+	#pragma omp parallel \
+	default(none), \
+	shared(k_indexer, k_max, matrixData, matrixResult, \
+		matrixResultCopy,columns,rows, flagCambio,numBlocks)
+	{
+		/* 3. Etiquetado inicial */
+		#pragma omp single
+		{
+			matrixResult = (int *)malloc( (rows)*(columns) * sizeof(int) );
+			matrixResultCopy = (int *)malloc( (rows)*(columns) * sizeof(int) );
+			k_indexer = (int *)malloc( (rows-1)*(columns-1) * sizeof(int) );
+			k_max = 0;
+			numBlocks=0;
+
+			if ( (matrixResult == NULL)  || (matrixResultCopy == NULL) || (k_indexer == NULL)  ) {
+				perror ("Error reservando memoria");
+				//return -1;
 			}
 		}
-	}
 
-
-
-	/* 4. Computacion */
-	int t=0;
-	/* 4.1 Flag para ver si ha habido cambios y si se continua la ejecucion */
-	int flagCambio=1;
-
-	/* 4.2 Busqueda de los bloques similiares */
-	for(t=0; flagCambio !=0; t++){
-		flagCambio=0;
-
-		/* 4.2.1 Actualizacion copia */
-		for(i=1;i<rows-1;i++){
-			for(j=1;j<columns-1;j++){
-				if(matrixResult[i*(columns)+j]!=-1){
-					matrixResultCopy[i*(columns)+j]=matrixResult[i*(columns)+j];
+		#pragma omp for \
+		nowait,\
+		schedule(dynamic, ((rows-1)*(columns-1))/omp_get_num_threads()), \
+		private(i,j,k)
+		for(i = 1; i < rows-1; i++){
+			for(j = 1; j < columns-1; j++){
+				// Si es 0 se trata del fondo y no lo computamos
+				if(matrixData[i*(columns)+j]!=0){
+					matrixResult[i*(columns)+j]=i*(columns)+j;
+					#pragma omp atomic capture
+					{
+						k = k_max; k_max++;
+					}
+					k_indexer[k] = i*(columns)+j;
+				} else {
+					matrixResult[i*(columns)+j]=-1;
 				}
 			}
+			matrixResult[i*(columns)]=-1;
+			matrixResult[i*(columns)+columns-1]=-1;
 		}
 
-		/* 4.2.2 Computo y detecto si ha habido cambios */
-		for(i=1;i<rows-1;i++){
-			for(j=1;j<columns-1;j++){
-				flagCambio= flagCambio+ computation(i,j,columns, matrixData, matrixResult, matrixResultCopy);
+		#pragma omp for \
+		nowait,\
+		schedule(static), \
+		private(j)
+		for(j=1;j< columns-1; j++){
+			matrixResult[j]=-1;
+			matrixResult[(rows-1)*(columns)+j]=-1;
+		}
+
+
+		/* 4.2 Busqueda de los bloques similiares */
+		do {
+			#pragma omp barrier
+
+			#pragma omp single
+			flagCambio=0;
+
+			/* 4.2.1 Actualizacion copia */
+			#pragma omp for \
+			schedule(static), \
+			private(k)
+			for(k=0;k<k_max;k++){
+				matrixResultCopy[k_indexer[k]]=matrixResult[k_indexer[k]];
 			}
-		}
 
-		#ifdef DEBUG
-			printf("\nResultados iter %d: \n", t);
-			for(i=0;i<rows;i++){
-				for(j=0;j<columns;j++){
-					printf ("%d\t", matrixResult[i*columns+j]);
+			/* 4.2.2 Computo y detecto si ha habido cambios */
+			#pragma omp for \
+			schedule(static), \
+			reduction(||:flagCambio),\
+			private(k)
+			for(k=0;k<k_max;k++){
+				if((matrixData[k_indexer[k]-columns] == matrixData[k_indexer[k]]) &&
+					(matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]-columns]))
+				{
+					matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]-columns];
+					flagCambio = 1;
 				}
-				printf("\n");
+				if((matrixData[k_indexer[k]+columns] == matrixData[k_indexer[k]]) &&
+					(matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]+columns]))
+				{
+					matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]+columns];
+					flagCambio = 1;
+				}
+				if((matrixData[k_indexer[k]-1] == matrixData[k_indexer[k]]) &&
+					(matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]-1]))
+				{
+					matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]-1];
+					flagCambio = 1;
+				}
+				if((matrixData[k_indexer[k]+1] == matrixData[k_indexer[k]]) &&
+					(matrixResult[k_indexer[k]] > matrixResultCopy[k_indexer[k]+1]))
+				{
+					matrixResult[k_indexer[k]] = matrixResultCopy[k_indexer[k]+1];
+					flagCambio = 1;
+				}
 			}
-		#endif
 
-	}
 
-	/* 4.3 Inicio cuenta del numero de bloques */
-	numBlocks=0;
-	for(i=1;i<rows-1;i++){
-		for(j=1;j<columns-1;j++){
-			if(matrixResult[i*columns+j] == i*columns+j) numBlocks++;
+			#ifdef DEBUG
+				#pragma omp for \
+				schedule(static), \
+				ordered,\
+				private(i,j)
+				for(i=0;i<rows;i++){
+					for(j=0;j<columns;j++){
+						printf ("%d\t", matrixResult[i*columns+j]);
+					}
+					printf("\n");
+				}
+			#endif
+		} while(flagCambio !=0);
+
+
+		/* 4.3 Inicio cuenta del numero de bloques */
+		#pragma omp for \
+		schedule(dynamic, k_max/omp_get_num_threads()), \
+		private(k),\
+		reduction(+:numBlocks)
+		for(k=0;k<k_max;k++){
+			if(matrixResult[k_indexer[k]] == k_indexer[k]) numBlocks++;
 		}
 	}
 
@@ -236,5 +266,5 @@ int main (int argc, char* argv[])
 	free(matrixData);
 	free(matrixResult);
 	free(matrixResultCopy);
-
+	free(k_indexer);
 }
