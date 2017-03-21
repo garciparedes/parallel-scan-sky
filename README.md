@@ -1,6 +1,17 @@
 # parallel-scan-sky
 - [tablón uva](http://frontendv.infor.uva.es/)
 
+## mpi
+
+- Usage:
+```
+cd mpi/src
+./run.sh 4 ../../data-sets/circles1.data
+```
+
+- Docs:
+[Article](mpi/article/article.pdf)
+
 ## openmp
 
 - Usage:

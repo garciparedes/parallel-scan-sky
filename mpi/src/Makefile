@@ -4,7 +4,7 @@
 # Makefile: Contar cuerpos celestes
 #
 
-CC=gcc
+CC=mpicc
 CFLAGS=-O3
 
 EXES=ScanSky_mpi ScanSky_mpi_debug ScanSky_mpi_write
