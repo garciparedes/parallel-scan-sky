@@ -182,7 +182,7 @@ int main (int argc, char* argv[])
 		row_end = rows-1;
 	}
 
-	printf("\tP=%d row_init=%d row_end=%d\n",world_rank, row_init,row_end );
+	//printf("\tP=%d row_init=%d row_end=%d\n",world_rank, row_init,row_end );
 
 	//
 	// EL CODIGO A PARALELIZAR COMIENZA AQUI
@@ -220,14 +220,6 @@ int main (int argc, char* argv[])
 		local_flagCambio=0;
 
 		/* 4.2.1 Actualizacion copia */
-		if(0){
-
-		MPI_Allreduce(matrixResult, matrixResultCopy, rows*columns, MPI_INT,
-			MPI_MIN, MPI_COMM_WORLD);
-
-		} else {
-
-		/* 4.2.1 Actualizacion copia */
 		for(i=row_init;i<row_end;i++){
 			for(j=1;j<columns-1;j++){
 				if(matrixResult[i*(columns)+j]!=-1){
@@ -239,19 +231,17 @@ int main (int argc, char* argv[])
 
 		if (world_size > 1) {
 			if (world_rank < world_size - 1) {
-				MPI_Send(matrixResult +(row_end)*columns, columns-2,
+				MPI_Send(&matrixResult[(row_end-1)*columns], columns,
 					MPI_INT, world_right, tag, MPI_COMM_WORLD);
-				MPI_Recv(matrixResultCopy + (row_end+1)*columns+j, columns-2,
+				MPI_Recv(&matrixResultCopy[(row_end)*columns], columns,
 					MPI_INT, world_right, tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 			}
 			if (world_rank > 0) {
-				MPI_Send(matrixResult +(row_init)*columns+j, columns-2,
+				MPI_Send(&matrixResult[(row_init)*columns], columns,
 					MPI_INT, world_left, tag, MPI_COMM_WORLD);
-				MPI_Recv(matrixResultCopy+ (row_init-1)*columns, columns-2,
+				MPI_Recv(&matrixResultCopy[(row_init-1)*columns], columns,
 					MPI_INT, world_left, tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 			}
-		}
-
 		}
 
 		/* 4.2.2 Computo y detecto si ha habido cambios */
@@ -284,10 +274,10 @@ int main (int argc, char* argv[])
 			if(matrixResult[i*columns+j] == i*columns+j) local_numBlocks++;
 		}
 	}
+	// printf("\tP=%d t=%d local_numBlocks=%d\n",world_rank,t, local_numBlocks );
 	MPI_Reduce(&local_numBlocks, &numBlocks, 1, MPI_INT, MPI_SUM, 0,
        MPI_COMM_WORLD);
 
-	// printf("\tP=%d local_numBlocks=%d\n",world_rank, local_numBlocks );
 
 
 	//
