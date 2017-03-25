@@ -184,8 +184,6 @@ int main (int argc, char* argv[])
 		row_end = rows-1;
 	}
 
-	//printf("\tP=%d row_init=%d row_end=%d\n",world_rank, row_init,row_end );
-
 	//
 	// EL CODIGO A PARALELIZAR COMIENZA AQUI
 	//
@@ -213,22 +211,24 @@ int main (int argc, char* argv[])
 	/* 4.1 Flag para ver si ha habido cambios y si se continua la ejecucion */
 	char flagCambio=1;
 	char local_flagCambio=1;
+	MPI_Request *request = (MPI_Request *)malloc( 4 * sizeof(MPI_Request) );
+
 	/* 4.2 Busqueda de los bloques similiares */
 	for(t=0; flagCambio !=0; t++){
 		flagCambio=0;
 
 		if (world_size > 1) {
 			if (world_rank < world_size - 1) {
-				MPI_Send(&matrixResult[(row_end-1)*columns], columns,
-					MPI_INT, world_right, 0, MPI_COMM_WORLD);
-				MPI_Recv(&matrixResultCopy[(row_end)*columns], columns,
-					MPI_INT, world_right, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+				MPI_Isend(&matrixResult[(row_end-1)*columns], columns,
+					MPI_INT, world_right, 0, MPI_COMM_WORLD, &request[2]);
+				MPI_Irecv(&matrixResultCopy[(row_end)*columns], columns,
+					MPI_INT, world_right, 0, MPI_COMM_WORLD, &request[0]);
 			}
 			if (world_rank > 0) {
-				MPI_Send(&matrixResult[(row_init)*columns], columns,
-					MPI_INT, world_left, 0, MPI_COMM_WORLD);
-				MPI_Recv(&matrixResultCopy[(row_init-1)*columns], columns,
-					MPI_INT, world_left, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+				MPI_Isend(&matrixResult[(row_init)*columns], columns,
+					MPI_INT, world_left, 0, MPI_COMM_WORLD, &request[3]);
+				MPI_Irecv(&matrixResultCopy[(row_init-1)*columns], columns,
+					MPI_INT, world_left, 0, MPI_COMM_WORLD, &request[1]);
 			}
 		}
 
@@ -242,6 +242,14 @@ int main (int argc, char* argv[])
 		}
 
 		if (world_size > 1) {
+			if (world_rank == world_size -1 ) {
+				MPI_Wait(&request[1], MPI_STATUS_IGNORE);
+			} else if (world_rank == 0 ) {
+				MPI_Wait(&request[0], MPI_STATUS_IGNORE);
+			} else {
+				MPI_Waitall(2, request, MPI_STATUS_IGNORE);
+			}
+
 			for(j = 1; j <columns-1; j++){
 				if(local_flagCambio){
 					break;
