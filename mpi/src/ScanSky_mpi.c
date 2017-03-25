@@ -82,6 +82,8 @@ int main (int argc, char* argv[])
 	double t_ini;
 	int i,j;
 
+	int *temp=NULL;
+
 	int local_numBlocks=-1;
 
 	int row_shift =-1;
@@ -216,6 +218,12 @@ int main (int argc, char* argv[])
 	/* 4.2 Busqueda de los bloques similiares */
 	for(t=0; flagCambio !=0; t++){
 		flagCambio=0;
+		local_flagCambio = 0;
+
+		/* 4.2.1 Actualizacion copia */
+		temp = matrixResultCopy;
+		matrixResultCopy = matrixResult;
+		matrixResult = temp;
 
 		if (world_size > 1) {
 			if (world_rank < world_size - 1) {
@@ -230,18 +238,7 @@ int main (int argc, char* argv[])
 				MPI_Irecv(&matrixResultCopy[(row_init-1)*columns], columns,
 					MPI_INT, world_left, 0, MPI_COMM_WORLD, &request[1]);
 			}
-		}
 
-		/* 4.2.1 Actualizacion copia */
-		for(i=row_init;i<row_end;i++){
-			for(j=1;j<columns-1;j++){
-				if(matrixResult[i*(columns)+j]!=-1){
-					matrixResultCopy[i*(columns)+j]=matrixResult[i*(columns)+j];
-				}
-			}
-		}
-
-		if (world_size > 1) {
 			if (world_rank == world_size -1 ) {
 				MPI_Wait(&request[1], MPI_STATUS_IGNORE);
 			} else if (world_rank == 0 ) {
@@ -249,37 +246,37 @@ int main (int argc, char* argv[])
 			} else {
 				MPI_Waitall(2, request, MPI_STATUS_IGNORE);
 			}
-
-			for(j = 1; j <columns-1; j++){
-				if(local_flagCambio){
-					break;
-				}
-				if (world_rank > 0 &&
-					matrixResult[(row_init-1)*columns+j] != -1 &&
-				 	matrixResult[(row_init-1)*columns+j] ==
-					matrixResultCopy[(row_init-1)*columns+j]) {
-
-					local_flagCambio = 1;
-					break;
-				}
-				if (world_rank < world_size-1 &&
-					matrixResult[(row_end)*columns+j] != -1 &&
-					matrixResult[(row_end)*columns+j] ==
-					matrixResultCopy[(row_end)*columns+j]) {
-
-					local_flagCambio = 1;
-					break;
-				}
-			}
 		}
 
-		if(local_flagCambio){
-			local_flagCambio = 0;
-			/* 4.2.2 Computo y detecto si ha habido cambios */
-			for(i=row_init;i<row_end;i++){
-				for(j=1;j<columns-1;j++){
-					local_flagCambio= computation(i,j,columns, matrixData,
-						matrixResult, matrixResultCopy) || local_flagCambio;
+		/* 4.2.2 Computo y detecto si ha habido cambios */
+		for(i=row_init;i<row_end;i++){
+			for(j=1;j<columns-1;j++){
+				if(matrixResult[i*columns+j] != -1){
+					matrixResult[i*columns+j] = matrixResultCopy[i*columns+j];
+					if((matrixData[(i-1)*columns+j] == matrixData[i*columns+j]) &&
+					    (matrixResult[i*columns+j] > matrixResultCopy[(i-1)*columns+j]))
+					{
+					    matrixResult[i*columns+j] = matrixResultCopy[(i-1)*columns+j];
+					    local_flagCambio = 1;
+					}
+					if((matrixData[(i+1)*columns+j] == matrixData[i*columns+j]) &&
+					    (matrixResult[i*columns+j] > matrixResultCopy[(i+1)*columns+j]))
+					{
+					    matrixResult[i*columns+j] = matrixResultCopy[(i+1)*columns+j];
+					    local_flagCambio = 1;
+					}
+					if((matrixData[i*columns+j-1] == matrixData[i*columns+j]) &&
+					    (matrixResult[i*columns+j] > matrixResultCopy[i*columns+j-1]))
+					{
+					    matrixResult[i*columns+j] = matrixResultCopy[i*columns+j-1];
+					    local_flagCambio = 1;
+					}
+					if((matrixData[i*columns+j+1] == matrixData[i*columns+j]) &&
+					    (matrixResult[i*columns+j] > matrixResultCopy[i*columns+j+1]))
+					{
+					    matrixResult[i*columns+j] = matrixResultCopy[i*columns+j+1];
+					    local_flagCambio = 1;
+					}
 				}
 			}
 		}
