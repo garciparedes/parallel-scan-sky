@@ -221,10 +221,6 @@ int main (int argc, char* argv[])
 		local_flagCambio = 0;
 
 		/* 4.2.1 Actualizacion copia */
-		temp = matrixResultCopy;
-		matrixResultCopy = matrixResult;
-		matrixResult = temp;
-
 		if (world_size > 1) {
 			if (world_rank < world_size - 1) {
 				MPI_Isend(&matrixResult[(row_end-1)*columns], columns,
@@ -247,6 +243,9 @@ int main (int argc, char* argv[])
 				MPI_Waitall(2, request, MPI_STATUS_IGNORE);
 			}
 		}
+		temp = matrixResultCopy;
+		matrixResultCopy = matrixResult;
+		matrixResult = temp;
 
 		/* 4.2.2 Computo y detecto si ha habido cambios */
 		for(i=row_init;i<row_end;i++){
