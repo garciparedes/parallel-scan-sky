@@ -25,7 +25,7 @@
 /**
 * Funcion secuencial para la busqueda de mi bloque
 */
-int computation(int x, int y, int columns, int* matrixData, int *matrixResult, int *matrixResultCopy){
+char computation(int x, int y, int columns, int* matrixData, int *matrixResult, int *matrixResultCopy){
 	// Inicialmente cojo mi indice
 	int result=matrixResultCopy[x*columns+y];
 	if( result!= -1){
@@ -91,6 +91,10 @@ int main (int argc, char* argv[])
 	MPI_Init(&argc, &argv);
 	MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 	MPI_Comm_size (MPI_COMM_WORLD, &world_size);
+
+	int world_right = (world_rank +1 ) % world_size;
+	int world_left = (world_rank -1 + world_size) % world_size;
+
 
 	if ( world_rank == 0 ) {
 
@@ -169,18 +173,16 @@ int main (int argc, char* argv[])
 		matrixData= (int *)malloc( rows*(columns) * sizeof(int) );
 		MPI_Bcast(matrixData, rows*columns, MPI_INT, 0, MPI_COMM_WORLD);
 	}
-
 	row_shift = (rows-1)/world_size;
-	column_shift = (columns-1)/world_size;
 
 	row_init = 1 + row_shift*world_rank;
-	row_end = row_shift + row_shift*world_rank + 1;
+	row_end = row_shift + row_shift*world_rank+1;
 
-	/*
-	printf("\tP=%d row_shift=%d columns_shift=%d\n",world_rank, row_shift,
-		column_shift );
-	*/
-	// printf("\tP=%d row_init=%d row_end=%d\n",world_rank, row_init,row_end );
+	if(world_rank == world_size-1){
+		row_end = rows-1;
+	}
+
+	printf("\tP=%d row_init=%d row_end=%d\n",world_rank, row_init,row_end );
 
 	//
 	// EL CODIGO A PARALELIZAR COMIENZA AQUI
@@ -207,17 +209,59 @@ int main (int argc, char* argv[])
 	/* 4. Computacion */
 	int t=0;
 	/* 4.1 Flag para ver si ha habido cambios y si se continua la ejecucion */
-	int flagCambio=1;
-	int local_flagCambio=1;
-
+	char flagCambio=1;
+	char local_flagCambio=1;
+	int left_tag = 1;
+	int right_tag = 1;
+	int tag = 0;
 	/* 4.2 Busqueda de los bloques similiares */
 	for(t=0; flagCambio !=0; t++){
 		flagCambio=0;
 		local_flagCambio=0;
 
 		/* 4.2.1 Actualizacion copia */
+		if(1){
+
 		MPI_Allreduce(matrixResult, matrixResultCopy, rows*columns, MPI_INT,
 			MPI_MIN, MPI_COMM_WORLD);
+
+		} else {
+
+		/* 4.2.1 Actualizacion copia */
+		for(i=row_init;i<row_end;i++){
+			for(j=1;j<columns-1;j++){
+				if(matrixResult[i*(columns)+j]!=-1){
+					matrixResultCopy[i*(columns)+j]=matrixResult[i*(columns)+j];
+				}
+			}
+		}
+
+
+		if (world_size > 1) {
+			if (world_rank > 0 && world_rank < world_size-1 ) {
+				MPI_Send(matrixResult +(row_end)*columns, columns-2,
+					MPI_INT, world_right, tag, MPI_COMM_WORLD);
+				MPI_Send(matrixResult +(row_init)*columns+j, columns-2,
+					MPI_INT, world_left, tag, MPI_COMM_WORLD);
+
+				MPI_Recv(matrixResultCopy + (row_end+1)*columns+j, columns-2,
+					MPI_INT, world_right, tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+				MPI_Recv(matrixResultCopy+ (row_init-1)*columns, columns-2,
+					MPI_INT, world_left, tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+			} else if (world_rank == 0) {
+				MPI_Send(matrixResult +(row_end)*columns, columns-2,
+					MPI_INT, world_right, tag, MPI_COMM_WORLD);
+				MPI_Recv(matrixResultCopy + (row_end+1)*columns+j, columns-2,
+					MPI_INT, world_right, tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+			} else if (world_rank == world_size -1) {
+				MPI_Send(matrixResult +(row_init)*columns+j, columns-2,
+					MPI_INT, world_left, tag, MPI_COMM_WORLD);
+				MPI_Recv(matrixResultCopy+ (row_init-1)*columns, columns-2,
+					MPI_INT, world_left, tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+			}
+		}
+
+		}
 
 		/* 4.2.2 Computo y detecto si ha habido cambios */
 		for(i=row_init;i<row_end;i++){
@@ -227,8 +271,8 @@ int main (int argc, char* argv[])
 			}
 		}
 
-		MPI_Allreduce(&local_flagCambio, &flagCambio, 1, MPI_INT, MPI_LOR,
-		              MPI_COMM_WORLD);
+		MPI_Allreduce(&local_flagCambio, &flagCambio, 1, MPI_CHAR, MPI_LOR,
+			MPI_COMM_WORLD);
 
 		#ifdef DEBUG
 		printf("\nResultados iter %d: \n", t);
