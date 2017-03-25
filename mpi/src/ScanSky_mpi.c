@@ -80,6 +80,14 @@ int main (int argc, char* argv[])
 	double t_ini;
 	int i,j;
 
+	int local_numBlocks=-1;
+
+	int row_shift =-1;
+	int column_shift =-1;
+
+	int row_init =-1;
+	int row_end =-1;
+
 	MPI_Init(&argc, &argv);
 	MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 	MPI_Comm_size (MPI_COMM_WORLD, &world_size);
@@ -105,6 +113,9 @@ int main (int argc, char* argv[])
 		// Añado dos filas y dos columnas mas para los bordes
 		rows=rows+2;
 		columns = columns+2;
+
+		MPI_Bcast(&rows, 1, MPI_INT, 0, MPI_COMM_WORLD);
+		MPI_Bcast(&columns, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
 		/* 2.3 Reservo la memoria necesaria para la matriz de datos */
 		matrixData= (int *)malloc( rows*(columns) * sizeof(int) );
@@ -134,6 +145,9 @@ int main (int argc, char* argv[])
 				fscanf (f, "%d\n", &matrixData[i*(columns)+j]);
 			}
 		}
+
+		MPI_Bcast(matrixData, rows*columns, MPI_INT, 0, MPI_COMM_WORLD);
+
 		fclose(f);
 
 		#ifdef WRITE
@@ -149,77 +163,97 @@ int main (int argc, char* argv[])
 
 		/* PUNTO DE INICIO MEDIDA DE TIEMPO */
 		t_ini = cp_Wtime();
+	} else {
+		MPI_Bcast(&rows, 1, MPI_INT, 0, MPI_COMM_WORLD);
+		MPI_Bcast(&columns, 1, MPI_INT, 0, MPI_COMM_WORLD);
+		matrixData= (int *)malloc( rows*(columns) * sizeof(int) );
+		MPI_Bcast(matrixData, rows*columns, MPI_INT, 0, MPI_COMM_WORLD);
 	}
+
+	row_shift = (rows-1)/world_size;
+	column_shift = (columns-1)/world_size;
+
+	row_init = 1 + row_shift*world_rank;
+	row_end = row_shift + row_shift*world_rank + 1;
+
+	/*
+	printf("\tP=%d row_shift=%d columns_shift=%d\n",world_rank, row_shift,
+		column_shift );
+	*/
+	// printf("\tP=%d row_init=%d row_end=%d\n",world_rank, row_init,row_end );
 
 	//
 	// EL CODIGO A PARALELIZAR COMIENZA AQUI
 	//
-	if ( world_rank == 0 ) {
 
-		/* 3. Etiquetado inicial */
-		matrixResult= (int *)malloc( (rows)*(columns) * sizeof(int) );
-		matrixResultCopy= (int *)malloc( (rows)*(columns) * sizeof(int) );
-		if ( (matrixResult == NULL)  || (matrixResultCopy == NULL)  ) {
-			perror ("Error reservando memoria");
-			return -1;
-		}
-		for(i=0;i< rows; i++){
-			for(j=0;j< columns; j++){
-				matrixResult[i*(columns)+j]=-1;
-				// Si es 0 se trata del fondo y no lo computamos
-				if(matrixData[i*(columns)+j]!=0){
-					matrixResult[i*(columns)+j]=i*(columns)+j;
-				}
-			}
-		}
-
-
-
-		/* 4. Computacion */
-		int t=0;
-		/* 4.1 Flag para ver si ha habido cambios y si se continua la ejecucion */
-		int flagCambio=1;
-
-		/* 4.2 Busqueda de los bloques similiares */
-		for(t=0; flagCambio !=0; t++){
-			flagCambio=0;
-
-			/* 4.2.1 Actualizacion copia */
-			for(i=1;i<rows-1;i++){
-				for(j=1;j<columns-1;j++){
-					if(matrixResult[i*(columns)+j]!=-1){
-						matrixResultCopy[i*(columns)+j]=matrixResult[i*(columns)+j];
-					}
-				}
-			}
-
-			/* 4.2.2 Computo y detecto si ha habido cambios */
-			for(i=1;i<rows-1;i++){
-				for(j=1;j<columns-1;j++){
-					flagCambio= flagCambio+ computation(i,j,columns, matrixData, matrixResult, matrixResultCopy);
-				}
-			}
-
-			#ifdef DEBUG
-			printf("\nResultados iter %d: \n", t);
-			for(i=0;i<rows;i++){
-				for(j=0;j<columns;j++){
-					printf ("%d\t", matrixResult[i*columns+j]);
-				}
-				printf("\n");
-			}
-			#endif
-
-		}
-
-		/* 4.3 Inicio cuenta del numero de bloques */
-		numBlocks=0;
-		for(i=1;i<rows-1;i++){
-			for(j=1;j<columns-1;j++){
-				if(matrixResult[i*columns+j] == i*columns+j) numBlocks++;
+	/* 3. Etiquetado inicial */
+	matrixResult= (int *)malloc( (rows)*(columns) * sizeof(int) );
+	matrixResultCopy= (int *)malloc( (rows)*(columns) * sizeof(int) );
+	if ( (matrixResult == NULL)  || (matrixResultCopy == NULL)  ) {
+		perror ("Error reservando memoria");
+		return -1;
+	}
+	for(i=0;i< rows; i++){
+		for(j=0;j< columns; j++){
+			matrixResult[i*(columns)+j]=-1;
+			// Si es 0 se trata del fondo y no lo computamos
+			if(matrixData[i*(columns)+j]!=0){
+				matrixResult[i*(columns)+j]=i*(columns)+j;
 			}
 		}
 	}
+
+
+	/* 4. Computacion */
+	int t=0;
+	/* 4.1 Flag para ver si ha habido cambios y si se continua la ejecucion */
+	int flagCambio=1;
+	int local_flagCambio=1;
+
+	/* 4.2 Busqueda de los bloques similiares */
+	for(t=0; flagCambio !=0; t++){
+		flagCambio=0;
+		local_flagCambio=0;
+
+		/* 4.2.1 Actualizacion copia */
+		MPI_Allreduce(matrixResult, matrixResultCopy, rows*columns, MPI_INT,
+			MPI_MIN, MPI_COMM_WORLD);
+
+		/* 4.2.2 Computo y detecto si ha habido cambios */
+		for(i=row_init;i<row_end;i++){
+			for(j=1;j<columns-1;j++){
+				local_flagCambio= computation(i,j,columns, matrixData,
+					matrixResult, matrixResultCopy) || local_flagCambio;
+			}
+		}
+
+		MPI_Allreduce(&local_flagCambio, &flagCambio, 1, MPI_INT, MPI_LOR,
+		              MPI_COMM_WORLD);
+
+		#ifdef DEBUG
+		printf("\nResultados iter %d: \n", t);
+		for(i=0;i<rows;i++){
+			for(j=0;j<columns;j++){
+				printf ("%d\t", matrixResult[i*columns+j]);
+			}
+			printf("\n");
+		}
+		#endif
+
+	}
+
+	/* 4.3 Inicio cuenta del numero de bloques */
+	local_numBlocks = 0;
+	for(i=row_init;i<row_end;i++){
+		for(j=1;j<columns-1;j++){
+			if(matrixResult[i*columns+j] == i*columns+j) local_numBlocks++;
+		}
+	}
+	MPI_Reduce(&local_numBlocks, &numBlocks, 1, MPI_INT, MPI_SUM, 0,
+       MPI_COMM_WORLD);
+
+	// printf("\tP=%d local_numBlocks=%d\n",world_rank, local_numBlocks );
+
 
 	//
 	// EL CODIGO A PARALELIZAR TERMINA AQUI
