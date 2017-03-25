@@ -220,7 +220,7 @@ int main (int argc, char* argv[])
 		local_flagCambio=0;
 
 		/* 4.2.1 Actualizacion copia */
-		if(1){
+		if(0){
 
 		MPI_Allreduce(matrixResult, matrixResultCopy, rows*columns, MPI_INT,
 			MPI_MIN, MPI_COMM_WORLD);
@@ -238,22 +238,13 @@ int main (int argc, char* argv[])
 
 
 		if (world_size > 1) {
-			if (world_rank > 0 && world_rank < world_size-1 ) {
-				MPI_Send(matrixResult +(row_end)*columns, columns-2,
-					MPI_INT, world_right, tag, MPI_COMM_WORLD);
-				MPI_Send(matrixResult +(row_init)*columns+j, columns-2,
-					MPI_INT, world_left, tag, MPI_COMM_WORLD);
-
-				MPI_Recv(matrixResultCopy + (row_end+1)*columns+j, columns-2,
-					MPI_INT, world_right, tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-				MPI_Recv(matrixResultCopy+ (row_init-1)*columns, columns-2,
-					MPI_INT, world_left, tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-			} else if (world_rank == 0) {
+			if (world_rank < world_size - 1) {
 				MPI_Send(matrixResult +(row_end)*columns, columns-2,
 					MPI_INT, world_right, tag, MPI_COMM_WORLD);
 				MPI_Recv(matrixResultCopy + (row_end+1)*columns+j, columns-2,
 					MPI_INT, world_right, tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-			} else if (world_rank == world_size -1) {
+			}
+			if (world_rank > 0) {
 				MPI_Send(matrixResult +(row_init)*columns+j, columns-2,
 					MPI_INT, world_left, tag, MPI_COMM_WORLD);
 				MPI_Recv(matrixResultCopy+ (row_init-1)*columns, columns-2,
