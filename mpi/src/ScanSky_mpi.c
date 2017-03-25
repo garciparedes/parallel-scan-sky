@@ -247,7 +247,7 @@ int main (int argc, char* argv[])
 					break;
 				}
 				if (world_rank > 0 &&
-					matrixResult[(row_end)*columns+j] != -1 &&
+					matrixResult[(row_init-1)*columns+j] != -1 &&
 				 	matrixResult[(row_init-1)*columns+j] ==
 					matrixResultCopy[(row_init-1)*columns+j]) {
 
