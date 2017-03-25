@@ -1,0 +1,61 @@
+\documentclass[10pt, a4paper,spanish]{article}
+
+\usepackage{mystyle}
+\usepackage{myvars}
+
+
+
+%-----------------------------
+
+\begin{document}
+
+	\maketitle % Insert title
+
+	\thispagestyle{fancy} % All pages have headers and footers
+
+
+%-----------------------------
+%	ABSTRACT
+%-----------------------------
+
+	\begin{abstract}
+		\noindent En este documento se relatan el conjunto de mejoras aplicadas a un código secuencial base. El modelo de paralelización utilizado para dicha tarea ha sido \emph{memoria distribuida}, para lo cual se ha utilizado el framework \emph{MPICH}\cite{tool:mpich} en su versión para el lenguaje de programación \emph{C}. El código fuente obtenido tras dichas optimizaciones se podrá consultar a través de \url{https://github.com/garciparedes/parallel-scan-sky/blob/master/mpi/src/ScanSky_mpi.c}\cite{code:parallel-scan-sky}
+	\end{abstract}
+
+%-----------------------------
+%	TEXT
+%-----------------------------
+
+
+	\section{Introducción}
+
+		\paragraph{}
+		En este documento se exponen el conjunto de mejoras realizadas sobre \say{un código secuencial para contar el número de objetos diferentes que se ven en una imagen o fotografía celeste, en general de espacio profundo, obtenida por un radiotelescopio}\cite{subject:cp}
+
+		\paragraph{}
+		\say{Las imágenes ya han sido procesadas, discretizando la luminosidad observada en cada punto en 16 diferentes niveles de grises o colores. Los pixels del fondo del espacio, una vez eliminado el ruido, tienen el índice de color 0. Los pixels de la imagen con una luminosidad o color suficientemente parecidos se representan con un mismo valor entre 1 y 15.}\cite{subject:cp}
+
+		\paragraph{}
+		\say{La imagen se carga en una matriz desde un fichero de texto plano. El fichero contiene un número entero en cada línea. Las dos primeras líneas contienen el número de filas y columnas de la imagen. El resto son números entre 0 y 15 con los valores de cada pixel, ordenados por filas.}\cite{subject:cp}
+
+		\paragraph{}
+		\say{Los pixels del mismo índice de color que están juntos, en horizontal o vertical (no en diagonal), se considera que son del mismo objeto. El programa etiqueta cada objeto de la imagen con una etiqueta diferente. Todos los pixels del mismo objeto tendrán la misma etiqueta. Para determinar el número de objetos, al final se cuentan el número de etiquetas diferentes. Los píxeles de índice 0 no se etiquetan.}\cite{subject:cp}
+
+	\section{Optimización}
+
+		\paragraph{}
+		[TODO ]
+
+	\section{Conclusiones}
+
+		\paragraph{}
+		[TODO ]
+
+%-----------------------------
+%	Bibliographic references
+%-----------------------------
+	\nocite{subject:cp}
+  \bibliographystyle{acm}
+  \bibliography{bib/misc}
+
+\end{document}
