@@ -19,45 +19,6 @@
 #include <mpi.h>
 
 
-/* Substituir min por el operador */
-#define min(x,y)    ((x) < (y)? (x) : (y))
-
-/**
-* Funcion secuencial para la busqueda de mi bloque
-*/
-char computation(int x, int y, int columns, int* matrixData, int *matrixResult,
-	int *matrixResultCopy){
-
-	// Inicialmente cojo mi indice
-	int result=matrixResultCopy[x*columns+y];
-	if( result!= -1){
-		//Si es de mi mismo grupo, entonces actualizo
-		if(matrixData[(x-1)*columns+y] == matrixData[x*columns+y])
-		{
-			result = min (result, matrixResultCopy[(x-1)*columns+y]);
-		}
-		if(matrixData[(x+1)*columns+y] == matrixData[x*columns+y])
-		{
-			result = min (result, matrixResultCopy[(x+1)*columns+y]);
-		}
-		if(matrixData[x*columns+y-1] == matrixData[x*columns+y])
-		{
-			result = min (result, matrixResultCopy[x*columns+y-1]);
-		}
-		if(matrixData[x*columns+y+1] == matrixData[x*columns+y])
-		{
-			result = min (result, matrixResultCopy[x*columns+y+1]);
-		}
-
-		// Si el indice no ha cambiado retorna 0
-		if(matrixResult[x*columns+y] == result){ return 0; }
-		// Si el indice cambia, actualizo matrix de resultados con el indice adecuado y retorno 1
-		else { matrixResult[x*columns+y]=result; return 1;}
-
-	}
-	return 0;
-}
-
 /**
 * Funcion principal
 */
@@ -122,9 +83,6 @@ int main (int argc, char* argv[])
 		rows=rows+2;
 		columns = columns+2;
 
-		MPI_Bcast(&rows, 1, MPI_INT, 0, MPI_COMM_WORLD);
-		MPI_Bcast(&columns, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
 		/* 2.3 Reservo la memoria necesaria para la matriz de datos */
 		matrixData= (int *)malloc( rows*(columns) * sizeof(int) );
 		if ( (matrixData == NULL)   ) {
@@ -154,7 +112,6 @@ int main (int argc, char* argv[])
 			}
 		}
 
-		MPI_Bcast(matrixData, rows*columns, MPI_INT, 0, MPI_COMM_WORLD);
 
 		fclose(f);
 
@@ -171,6 +128,9 @@ int main (int argc, char* argv[])
 
 		/* PUNTO DE INICIO MEDIDA DE TIEMPO */
 		t_ini = cp_Wtime();
+		MPI_Bcast(&rows, 1, MPI_INT, 0, MPI_COMM_WORLD);
+		MPI_Bcast(&columns, 1, MPI_INT, 0, MPI_COMM_WORLD);
+		MPI_Bcast(matrixData, rows*columns, MPI_INT, 0, MPI_COMM_WORLD);
 	} else {
 		MPI_Bcast(&rows, 1, MPI_INT, 0, MPI_COMM_WORLD);
 		MPI_Bcast(&columns, 1, MPI_INT, 0, MPI_COMM_WORLD);
@@ -218,20 +178,19 @@ int main (int argc, char* argv[])
 	/* 4.2 Busqueda de los bloques similiares */
 	for(t=0; flagCambio !=0; t++){
 		flagCambio=0;
-		local_flagCambio = 0;
 
 		/* 4.2.1 Actualizacion copia */
 		if (world_size > 1) {
 			if (world_rank < world_size - 1) {
-				MPI_Isend(&matrixResult[(row_end-1)*columns], columns,
+				MPI_Isend(&matrixResult[(row_end-1)*columns+1], columns-2,
 					MPI_INT, world_right, 0, MPI_COMM_WORLD, &request[2]);
-				MPI_Irecv(&matrixResultCopy[(row_end)*columns], columns,
+				MPI_Irecv(&matrixResultCopy[(row_end)*columns+1], columns-2,
 					MPI_INT, world_right, 0, MPI_COMM_WORLD, &request[0]);
 			}
 			if (world_rank > 0) {
-				MPI_Isend(&matrixResult[(row_init)*columns], columns,
+				MPI_Isend(&matrixResult[(row_init)*columns+1], columns-2,
 					MPI_INT, world_left, 0, MPI_COMM_WORLD, &request[3]);
-				MPI_Irecv(&matrixResultCopy[(row_init-1)*columns], columns,
+				MPI_Irecv(&matrixResultCopy[(row_init-1)*columns+1], columns-2,
 					MPI_INT, world_left, 0, MPI_COMM_WORLD, &request[1]);
 			}
 
@@ -247,6 +206,7 @@ int main (int argc, char* argv[])
 		matrixResultCopy = matrixResult;
 		matrixResult = temp;
 
+		local_flagCambio = 0;
 		/* 4.2.2 Computo y detecto si ha habido cambios */
 		for(i=row_init;i<row_end;i++){
 			for(j=1;j<columns-1;j++){
