@@ -60,6 +60,10 @@ int main (int argc, char* argv[])
 	int world_right = (world_rank +1 ) % world_size;
 	int world_left = (world_rank -1 + world_size) % world_size;
 
+	int t=-1;
+	int flagCambio=-1;
+	int local_flagCambio=-1;
+	MPI_Request *request = (MPI_Request *)malloc( 4 * sizeof(MPI_Request) );
 
 	if ( world_rank == 0 ) {
 
@@ -169,30 +173,17 @@ int main (int argc, char* argv[])
 
 
 	/* 4. Computacion */
-	int t=0;
+	t=0;
 	/* 4.1 Flag para ver si ha habido cambios y si se continua la ejecucion */
-	char flagCambio=1;
-	char local_flagCambio=1;
-	MPI_Request *request = (MPI_Request *)malloc( 4 * sizeof(MPI_Request) );
+	flagCambio=1;
+	local_flagCambio=1;
 
 	/* 4.2 Busqueda de los bloques similiares */
 	for(t=0; flagCambio !=0; t++){
 		flagCambio=0;
 
 		/* 4.2.1 Actualizacion copia */
-		if (world_size > 1) {
-			if (world_rank < world_size - 1) {
-				MPI_Isend(&matrixResult[(row_end-1)*columns+1], columns-2,
-					MPI_INT, world_right, 0, MPI_COMM_WORLD, &request[2]);
-				MPI_Irecv(&matrixResultCopy[(row_end)*columns+1], columns-2,
-					MPI_INT, world_right, 0, MPI_COMM_WORLD, &request[0]);
-			}
-			if (world_rank > 0) {
-				MPI_Isend(&matrixResult[(row_init)*columns+1], columns-2,
-					MPI_INT, world_left, 0, MPI_COMM_WORLD, &request[3]);
-				MPI_Irecv(&matrixResultCopy[(row_init-1)*columns+1], columns-2,
-					MPI_INT, world_left, 0, MPI_COMM_WORLD, &request[1]);
-			}
+		if (world_size > 1 && t > 0) {
 
 			if (world_rank == world_size -1 ) {
 				MPI_Wait(&request[1], MPI_STATUS_IGNORE);
@@ -237,6 +228,21 @@ int main (int argc, char* argv[])
 					    local_flagCambio = 1;
 					}
 				}
+			}
+		}
+
+		if (world_size > 1) {
+			if (world_rank < world_size - 1) {
+				MPI_Isend(&matrixResult[(row_end-1)*columns+1], columns-2,
+					MPI_INT, world_right, 0, MPI_COMM_WORLD, &request[2]);
+				MPI_Irecv(&matrixResult[(row_end)*columns+1], columns-2,
+					MPI_INT, world_right, 0, MPI_COMM_WORLD, &request[0]);
+			}
+			if (world_rank > 0) {
+				MPI_Isend(&matrixResult[(row_init)*columns+1], columns-2,
+					MPI_INT, world_left, 0, MPI_COMM_WORLD, &request[3]);
+				MPI_Irecv(&matrixResult[(row_init-1)*columns+1], columns-2,
+					MPI_INT, world_left, 0, MPI_COMM_WORLD, &request[1]);
 			}
 		}
 
