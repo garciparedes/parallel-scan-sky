@@ -63,7 +63,7 @@ int main (int argc, char* argv[])
 	int t=-1;
 	int flagCambio=-1;
 	int local_flagCambio=-1;
-	MPI_Request *request = (MPI_Request *)malloc( 4 * sizeof(MPI_Request) );
+	MPI_Request *request = (MPI_Request *)malloc( world_size * sizeof(MPI_Request) );
 
 	if ( world_rank == 0 ) {
 
@@ -134,14 +134,12 @@ int main (int argc, char* argv[])
 		t_ini = cp_Wtime();
 		MPI_Bcast(&rows, 1, MPI_INT, 0, MPI_COMM_WORLD);
 		MPI_Bcast(&columns, 1, MPI_INT, 0, MPI_COMM_WORLD);
-		MPI_Bcast(matrixData, rows*columns, MPI_INT, 0, MPI_COMM_WORLD);
 	} else {
 		MPI_Bcast(&rows, 1, MPI_INT, 0, MPI_COMM_WORLD);
 		MPI_Bcast(&columns, 1, MPI_INT, 0, MPI_COMM_WORLD);
-		matrixData= (int *)malloc( rows*(columns) * sizeof(int) );
-		MPI_Bcast(matrixData, rows*columns, MPI_INT, 0, MPI_COMM_WORLD);
+		matrixData= (int *)malloc( (rows)*(columns) * sizeof(int) );
 	}
-	row_shift = (rows-1)/world_size;
+	row_shift = (rows)/world_size;
 
 	row_init = 1 + row_shift*world_rank;
 	row_end = row_shift + row_shift*world_rank+1;
@@ -149,6 +147,19 @@ int main (int argc, char* argv[])
 	if(world_rank == world_size-1){
 		row_end = rows-1;
 	}
+
+	if (world_rank == 0){
+		for(i = 1; i < world_size-1; i++ ){
+			MPI_Isend(&matrixData[(row_shift*i)*(columns)], (row_shift + 2)*columns,
+				MPI_INT, i, 0, MPI_COMM_WORLD, &request[i]);
+		}
+		MPI_Isend(&matrixData[(row_shift*i)*(columns)], ((rows) - (row_shift*i))*columns,
+			MPI_INT, world_size-1, 0, MPI_COMM_WORLD, &request[i]);
+	} else {
+		MPI_Recv(&matrixData[(row_init-1)*(columns)], ((row_end+1) - (row_init-1))*columns,
+			MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+	}
+
 
 	//
 	// EL CODIGO A PARALELIZAR COMIENZA AQUI
