@@ -231,10 +231,6 @@ int main (int argc, char* argv[])
 				} else {
 					MPI_Waitall(2, request, MPI_STATUS_IGNORE);
 				}
-
-				if(local_flagCambio) {
-					MPI_Wait(&request[4], MPI_STATUS_IGNORE);
-				}
 			}
 			if (world_rank != world_size - 1) {
 				MPI_Start(&request[0]);
@@ -243,7 +239,7 @@ int main (int argc, char* argv[])
 				MPI_Start(&request[1]);
 			}
 		}
-		flagCambio=0;
+
 		local_flagCambio = 0;
 		/* 4.2.2 Computo y detecto si ha habido cambios */
 		for(i=row_init;i<row_end;i++){
@@ -287,6 +283,10 @@ int main (int argc, char* argv[])
 				MPI_Wait(&request[3], MPI_STATUS_IGNORE);
 				MPI_Start(&request[3]);
 			}
+			if(t !=  0){
+				MPI_Wait(&request[4], MPI_STATUS_IGNORE);
+			}
+			flagCambio=0;
 			MPI_Iallreduce(&local_flagCambio, &flagCambio, 1, MPI_CHAR, MPI_LOR,
 				MPI_COMM_WORLD, &request[4]);
 
