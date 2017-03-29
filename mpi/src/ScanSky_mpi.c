@@ -201,7 +201,7 @@ int main (int argc, char* argv[])
 		flagCambio=0;
 
 		/* 4.2.1 Actualizacion copia */
-		if (world_size > 1 && t > 0) {
+		if (world_size != 1 && t > 0) {
 
 			if (world_rank == world_size -1 ) {
 				MPI_Wait(&request[1], MPI_STATUS_IGNORE);
@@ -249,14 +249,14 @@ int main (int argc, char* argv[])
 			}
 		}
 
-		if (world_size > 1) {
-			if (world_rank < world_size - 1) {
+		if (world_size != 1) {
+			if (world_rank != world_size - 1) {
 				MPI_Isend(&matrixResult[(row_end-1)*columns+1], 1,
 					column_type, world_right, 0, MPI_COMM_WORLD, &request[2]);
 				MPI_Irecv(&matrixResult[(row_end)*columns+1], 1,
 					column_type, world_right, 0, MPI_COMM_WORLD, &request[0]);
 			}
-			if (world_rank > 0) {
+			if (world_rank != 0) {
 				MPI_Isend(&matrixResult[(row_init)*columns+1], 1,
 					column_type, world_left, 0, MPI_COMM_WORLD, &request[2]);
 				MPI_Irecv(&matrixResult[(row_init-1)*columns+1], 1,
