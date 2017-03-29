@@ -181,10 +181,11 @@ int main (int argc, char* argv[])
 	}
 	for(i=row_init-1;i< row_end+1; i++){
 		for(j=0;j< columns; j++){
-			matrixResult[i*(columns)+j]=-1;
 			// Si es 0 se trata del fondo y no lo computamos
 			if(matrixData[i*(columns)+j]!=0){
 				matrixResult[i*(columns)+j]=i*(columns)+j;
+			} else {
+				matrixResult[i*(columns)+j]=-1;
 			}
 		}
 	}
@@ -201,7 +202,7 @@ int main (int argc, char* argv[])
 		flagCambio=0;
 
 		/* 4.2.1 Actualizacion copia */
-		if (world_size != 1 && t > 0) {
+		if (world_size != 1 && t != 0) {
 
 			if (world_rank == world_size -1 ) {
 				MPI_Wait(&request[1], MPI_STATUS_IGNORE);
@@ -251,21 +252,24 @@ int main (int argc, char* argv[])
 
 		if (world_size != 1) {
 			if (world_rank != world_size - 1) {
-				MPI_Isend(&matrixResult[(row_end-1)*columns+1], 1,
-					column_type, world_right, 0, MPI_COMM_WORLD, &request[2]);
 				MPI_Irecv(&matrixResult[(row_end)*columns+1], 1,
 					column_type, world_right, 0, MPI_COMM_WORLD, &request[0]);
+				MPI_Isend(&matrixResult[(row_end-1)*columns+1], 1,
+					column_type, world_right, 0, MPI_COMM_WORLD, &request[2]);
 			}
 			if (world_rank != 0) {
-				MPI_Isend(&matrixResult[(row_init)*columns+1], 1,
-					column_type, world_left, 0, MPI_COMM_WORLD, &request[2]);
 				MPI_Irecv(&matrixResult[(row_init-1)*columns+1], 1,
 					column_type, world_left, 0, MPI_COMM_WORLD, &request[1]);
+				MPI_Isend(&matrixResult[(row_init)*columns+1], 1,
+					column_type, world_left, 0, MPI_COMM_WORLD, &request[2]);
 			}
+			MPI_Allreduce(&local_flagCambio, &flagCambio, 1, MPI_CHAR, MPI_LOR,
+				MPI_COMM_WORLD);
+		} else {
+			flagCambio = local_flagCambio;
 		}
 
-		MPI_Allreduce(&local_flagCambio, &flagCambio, 1, MPI_CHAR, MPI_LOR,
-			MPI_COMM_WORLD);
+
 
 		#ifdef DEBUG
 		printf("\nResultados iter %d: \n", t);
