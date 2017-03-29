@@ -53,6 +53,12 @@ int main (int argc, char* argv[])
 	int row_init =-1;
 	int row_end =-1;
 
+	int t=-1;
+	int flagCambio=-1;
+	int local_flagCambio=-1;
+	MPI_Request *request = (MPI_Request *)malloc( 3 * sizeof(MPI_Request) );
+	MPI_Datatype column_type;
+
 	MPI_Init(&argc, &argv);
 	MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 	MPI_Comm_size (MPI_COMM_WORLD, &world_size);
@@ -60,10 +66,7 @@ int main (int argc, char* argv[])
 	int world_right = (world_rank +1 ) % world_size;
 	int world_left = (world_rank -1 + world_size) % world_size;
 
-	int t=-1;
-	int flagCambio=-1;
-	int local_flagCambio=-1;
-	MPI_Request *request = (MPI_Request *)malloc( world_size * sizeof(MPI_Request) );
+
 
 	if ( world_rank == 0 ) {
 
@@ -139,6 +142,10 @@ int main (int argc, char* argv[])
 		MPI_Bcast(&columns, 1, MPI_INT, 0, MPI_COMM_WORLD);
 		matrixData= (int *)malloc( (rows)*(columns) * sizeof(int) );
 	}
+
+	MPI_Type_contiguous( columns-2, MPI_INT, &column_type );
+	MPI_Type_commit(&column_type);
+
 	row_shift = (rows)/world_size;
 
 	row_init = 1 + row_shift*world_rank;
@@ -151,10 +158,10 @@ int main (int argc, char* argv[])
 	if (world_rank == 0){
 		for(i = 1; i < world_size-1; i++ ){
 			MPI_Isend(&matrixData[(row_shift*i)*(columns)], (row_shift + 2)*columns,
-				MPI_INT, i, 0, MPI_COMM_WORLD, &request[i]);
+				MPI_INT, i, 0, MPI_COMM_WORLD, &request[0]);
 		}
 		MPI_Isend(&matrixData[(row_shift*i)*(columns)], ((rows) - (row_shift*i))*columns,
-			MPI_INT, world_size-1, 0, MPI_COMM_WORLD, &request[i]);
+			MPI_INT, world_size-1, 0, MPI_COMM_WORLD, &request[0]);
 	} else {
 		MPI_Recv(&matrixData[(row_init-1)*(columns)], ((row_end+1) - (row_init-1))*columns,
 			MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
@@ -244,16 +251,16 @@ int main (int argc, char* argv[])
 
 		if (world_size > 1) {
 			if (world_rank < world_size - 1) {
-				MPI_Isend(&matrixResult[(row_end-1)*columns+1], columns-2,
-					MPI_INT, world_right, 0, MPI_COMM_WORLD, &request[2]);
-				MPI_Irecv(&matrixResult[(row_end)*columns+1], columns-2,
-					MPI_INT, world_right, 0, MPI_COMM_WORLD, &request[0]);
+				MPI_Isend(&matrixResult[(row_end-1)*columns+1], 1,
+					column_type, world_right, 0, MPI_COMM_WORLD, &request[2]);
+				MPI_Irecv(&matrixResult[(row_end)*columns+1], 1,
+					column_type, world_right, 0, MPI_COMM_WORLD, &request[0]);
 			}
 			if (world_rank > 0) {
-				MPI_Isend(&matrixResult[(row_init)*columns+1], columns-2,
-					MPI_INT, world_left, 0, MPI_COMM_WORLD, &request[3]);
-				MPI_Irecv(&matrixResult[(row_init-1)*columns+1], columns-2,
-					MPI_INT, world_left, 0, MPI_COMM_WORLD, &request[1]);
+				MPI_Isend(&matrixResult[(row_init)*columns+1], 1,
+					column_type, world_left, 0, MPI_COMM_WORLD, &request[2]);
+				MPI_Irecv(&matrixResult[(row_init-1)*columns+1], 1,
+					column_type, world_left, 0, MPI_COMM_WORLD, &request[1]);
 			}
 		}
 
@@ -271,6 +278,8 @@ int main (int argc, char* argv[])
 		#endif
 
 	}
+
+	MPI_Type_free(&column_type);
 
 	/* 4.3 Inicio cuenta del numero de bloques */
 	local_numBlocks = 0;
@@ -314,6 +323,7 @@ int main (int argc, char* argv[])
 	free(matrixData);
 	free(matrixResult);
 	free(matrixResultCopy);
+	free(request);
 
 	MPI_Finalize();
 	return 0;
