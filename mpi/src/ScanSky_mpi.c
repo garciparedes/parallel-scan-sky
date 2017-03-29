@@ -2,11 +2,13 @@
 * Contar cuerpos celestes
 *
 * Asignatura Computación Paralela (Grado Ingeniería Informática)
-* Código secuencial base
+* Código MPI
 *
 * @author Ana Moretón Fernández
 * @author Eduardo Rodríguez Gutiez
-* @version v1.3
+* @author Sergio García Prado (@garciparedes)
+* @author Adrian Calvo Rojo
+* @version v2.3
 *
 * (c) 2017, Grupo Trasgo, Universidad de Valladolid
 */
@@ -140,7 +142,6 @@ int main (int argc, char* argv[])
 	} else {
 		MPI_Bcast(&rows, 1, MPI_INT, 0, MPI_COMM_WORLD);
 		MPI_Bcast(&columns, 1, MPI_INT, 0, MPI_COMM_WORLD);
-		matrixData= (int *)malloc( (rows)*(columns) * sizeof(int) );
 	}
 
 	MPI_Type_contiguous( columns-2, MPI_INT, &column_type );
@@ -148,20 +149,22 @@ int main (int argc, char* argv[])
 
 	row_shift = (rows)/world_size;
 
-	row_init = 1 + row_shift*world_rank;
-	row_end = row_shift + row_shift*world_rank+1;
+	row_init = 1;
+	row_end = row_shift +1;
 
 	if(world_rank == world_size-1){
-		row_end = rows-1;
+		row_end = (rows-1)- (row_shift*(world_size-1));
 	}
 
 	//
 	// EL CODIGO A PARALELIZAR COMIENZA AQUI
 	//
-
+	if (world_rank != 0){
+		matrixData= (int *)malloc( (2 + row_end - row_init)*(columns) * sizeof(int) );
+	}
 	/* 3. Etiquetado inicial */
-	matrixResult= (int *)malloc( (rows)*(columns) * sizeof(int) );
-	matrixResultCopy= (int *)malloc( (rows)*(columns) * sizeof(int) );
+	matrixResult= (int *)malloc( (2 + row_end - row_init)*(columns) * sizeof(int) );
+	matrixResultCopy= (int *)malloc( (2 + row_end - row_init)*(columns) * sizeof(int) );
 	if ( (matrixResult == NULL)  || (matrixResultCopy == NULL)  ) {
 		perror ("Error reservando memoria");
 		return -1;
@@ -171,13 +174,15 @@ int main (int argc, char* argv[])
 
 		if (world_rank == 0){
 			for(i = 1; i < world_size-1; i++ ){
-				MPI_Isend(&matrixData[(row_shift*i)*(columns)], (row_shift + 2)*columns,
+				MPI_Isend(&matrixData[(row_shift*i)*(columns)],
+					(row_shift + 2)*columns,
 					MPI_INT, i, 0, MPI_COMM_WORLD, &request[0]);
 			}
-			MPI_Isend(&matrixData[(row_shift*(world_size-1))*(columns)], ((rows) - (row_shift*(world_size-1)))*columns,
+			MPI_Isend(&matrixData[(row_shift*(world_size-1))*(columns)],
+				((rows) - (row_shift*(world_size-1)))*columns,
 				MPI_INT, world_size-1, 0, MPI_COMM_WORLD, &request[0]);
 		} else {
-			MPI_Recv(&matrixData[(row_init-1)*(columns)], ((row_end+1) - (row_init-1))*columns,
+			MPI_Recv(&matrixData[(row_init-1)*(columns)], (2 + row_end - row_init)*columns,
 				MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 		}
 
@@ -198,10 +203,11 @@ int main (int argc, char* argv[])
 	}
 
 	for(i=row_init-1;i< row_end+1; i++){
+		const int t1 = (i+row_shift*world_rank)*columns;
 		for(j=0;j< columns; j++){
 			// Si es 0 se trata del fondo y no lo computamos
 			if(matrixData[i*(columns)+j]!=0){
-				matrixResult[i*(columns)+j]=i*(columns)+j;
+				matrixResult[i*(columns)+j]=t1+j;
 			} else {
 				matrixResult[i*(columns)+j]=-1;
 			}
@@ -226,20 +232,40 @@ int main (int argc, char* argv[])
 			if (t != 0){
 				if (world_rank == world_size -1 ) {
 					MPI_Wait(&request[1], MPI_STATUS_IGNORE);
+					if (!local_flagCambio){
+						for(j = 1; j < columns-1;j++){
+							if (matrixResult[(row_init-1)*columns+j] !=
+								matrixResultCopy[(row_init-1)*columns+j]) {
+								local_flagCambio = 1;
+								break;
+							}
+						}
+					}
 				} else if (world_rank == 0 ) {
 					MPI_Wait(&request[0], MPI_STATUS_IGNORE);
+					if (!local_flagCambio){
+						for(j = 1; j < columns-1;j++){
+							if (matrixResult[(row_end)*columns+j]
+								!= matrixResultCopy[(row_end)*columns+j]) {
+								local_flagCambio = 1;
+								break;
+							}
+						}
+					}
 				} else {
 					MPI_Waitall(2, request, MPI_STATUS_IGNORE);
-				}
-				if (!local_flagCambio){
-					for(j = 1; j < columns-1;j++){
-						if (matrixResult[(row_init-1)*columns+j] != matrixResultCopy[(row_init-1)*columns+j]) {
-							local_flagCambio = 1;
-							break;
-						}
-						if (matrixResult[(row_end)*columns+j] != matrixResultCopy[(row_end)*columns+j]) {
-							local_flagCambio = 1;
-							break;
+					if (!local_flagCambio){
+						for(j = 1; j < columns-1;j++){
+							if (matrixResult[(row_init-1)*columns+j]!=
+								matrixResultCopy[(row_init-1)*columns+j]) {
+								local_flagCambio = 1;
+								break;
+							}
+							if (matrixResult[(row_end)*columns+j]!=
+								matrixResultCopy[(row_end)*columns+j]) {
+								local_flagCambio = 1;
+								break;
+							}
 						}
 					}
 				}
@@ -303,7 +329,7 @@ int main (int argc, char* argv[])
 			MPI_Iallreduce(&local_flagCambio, &flagCambio, 1, MPI_CHAR, MPI_LOR,
 				MPI_COMM_WORLD, &request[4]);
 
-			if (local_flagCambio == 0){
+			if (!local_flagCambio){
 				MPI_Wait(&request[4], MPI_STATUS_IGNORE);
 			}
 		}
@@ -327,8 +353,9 @@ int main (int argc, char* argv[])
 	/* 4.3 Inicio cuenta del numero de bloques */
 	local_numBlocks = 0;
 	for(i=row_init;i<row_end;i++){
+		const int t1 = (i+row_shift*world_rank)*columns;
 		for(j=1;j<columns-1;j++){
-			if(matrixResult[i*columns+j] == i*columns+j) local_numBlocks++;
+			if(matrixResult[i*columns+j] == t1+j) local_numBlocks++;
 		}
 	}
 
