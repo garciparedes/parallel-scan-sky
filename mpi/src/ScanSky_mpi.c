@@ -212,7 +212,7 @@ int main (int argc, char* argv[])
 	/* 4. Computacion */
 	t=0;
 	/* 4.1 Flag para ver si ha habido cambios y si se continua la ejecucion */
-	flagCambio=1;
+	flagCambio=0;
 	local_flagCambio=1;
 
 	/* 4.2 Busqueda de los bloques similiares */
