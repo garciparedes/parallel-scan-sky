@@ -174,7 +174,7 @@ int main (int argc, char* argv[])
 				MPI_Isend(&matrixData[(row_shift*i)*(columns)], (row_shift + 2)*columns,
 					MPI_INT, i, 0, MPI_COMM_WORLD, &request[0]);
 			}
-			MPI_Isend(&matrixData[(row_shift*i)*(columns)], ((rows) - (row_shift*(world_size-1)))*columns,
+			MPI_Isend(&matrixData[(row_shift*(world_size-1))*(columns)], ((rows) - (row_shift*(world_size-1)))*columns,
 				MPI_INT, world_size-1, 0, MPI_COMM_WORLD, &request[0]);
 		} else {
 			MPI_Recv(&matrixData[(row_init-1)*(columns)], ((row_end+1) - (row_init-1))*columns,
