@@ -137,13 +137,13 @@ int main (int argc, char* argv[])
 
 		/* PUNTO DE INICIO MEDIDA DE TIEMPO */
 		t_ini = cp_Wtime();
-		MPI_Bcast(&rows, 1, MPI_INT, 0, MPI_COMM_WORLD);
-		MPI_Bcast(&columns, 1, MPI_INT, 0, MPI_COMM_WORLD);
-	} else {
-		MPI_Bcast(&rows, 1, MPI_INT, 0, MPI_COMM_WORLD);
-		MPI_Bcast(&columns, 1, MPI_INT, 0, MPI_COMM_WORLD);
 	}
+	MPI_Ibcast(&rows, 1, MPI_INT, 0, MPI_COMM_WORLD, &request[0]);
+	MPI_Ibcast(&columns, 1, MPI_INT, 0, MPI_COMM_WORLD, &request[1]);
 
+	if (world_rank != 0){
+		MPI_Waitall(2, request, MPI_STATUS_IGNORE);
+	}
 	MPI_Type_contiguous( columns-2, MPI_INT, &column_type );
 	MPI_Type_commit(&column_type);
 
@@ -169,7 +169,6 @@ int main (int argc, char* argv[])
 		perror ("Error reservando memoria");
 		return -1;
 	}
-
 	if (world_size != 1) {
 
 		if (world_rank == 0){
@@ -186,19 +185,17 @@ int main (int argc, char* argv[])
 				MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 		}
 
-		if (world_size > 1) {
-			if (world_rank != world_size - 1) {
-				MPI_Send_init(&matrixResult[(row_end-1)*columns+1], 1,
-					column_type, world_right, 0, MPI_COMM_WORLD, &request[2]);
-				MPI_Recv_init(&matrixResultCopy[(row_end)*columns+1], 1,
-					column_type, world_right, 0, MPI_COMM_WORLD, &request[0]);
-			}
-			if (world_rank != 0) {
-				MPI_Send_init(&matrixResult[(row_init)*columns+1], 1,
-					column_type, world_left, 0, MPI_COMM_WORLD, &request[3]);
-				MPI_Recv_init(&matrixResultCopy[(row_init-1)*columns+1], 1,
-					column_type, world_left, 0, MPI_COMM_WORLD, &request[1]);
-			}
+		if (world_rank != world_size - 1) {
+			MPI_Send_init(&matrixResult[(row_end-1)*columns+1], 1,
+				column_type, world_right, 0, MPI_COMM_WORLD, &request[2]);
+			MPI_Recv_init(&matrixResultCopy[(row_end)*columns+1], 1,
+				column_type, world_right, 0, MPI_COMM_WORLD, &request[0]);
+		}
+		if (world_rank != 0) {
+			MPI_Send_init(&matrixResult[(row_init)*columns+1], 1,
+				column_type, world_left, 0, MPI_COMM_WORLD, &request[3]);
+			MPI_Recv_init(&matrixResultCopy[(row_init-1)*columns+1], 1,
+				column_type, world_left, 0, MPI_COMM_WORLD, &request[1]);
 		}
 	}
 
