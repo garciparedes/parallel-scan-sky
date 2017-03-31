@@ -1,0 +1,49 @@
+\ProvidesPackage{mystyle}
+
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+
+\usepackage[T1]{fontenc}
+
+\usepackage[hmarginratio=1:1,top=28mm]{geometry}
+\usepackage[hang, small,labelfont=bf,up,textfont=it,up]{caption}
+\usepackage{subcaption}
+\usepackage[section]{placeins}
+
+\usepackage{float}
+
+\usepackage{amsmath,amssymb}
+
+\usepackage{graphicx}
+\graphicspath{ {images/} }
+
+\usepackage[hidelinks]{hyperref}
+
+\usepackage{minted}
+\setminted[c]{tabsize=1,fontsize=\footnotesize}
+
+
+\usepackage[inline]{enumitem}
+
+\usepackage{float}
+\RecustomVerbatimEnvironment{Verbatim}{BVerbatim}{}
+
+\usepackage{dirtytalk}
+
+\usepackage{abstract}
+\renewcommand{\abstractnamefont}{\normalfont\bfseries}
+\renewcommand{\abstracttextfont}{\normalfont\small\itshape}
+
+
+\usepackage{titlesec}
+\renewcommand\thesection{\Roman{section}}
+\renewcommand\thesubsection{\Alph{subsection}}
+\titleformat{\section}[block]{\large\scshape\centering}{\thesection.}{1em}{}
+\titleformat{\subsection}[block]{\normalsize}{\thesection. \thesubsection)}{0.7em}{}
+
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhead{}
+\fancyfoot{}
+\fancyhead[C]{ \today \ $\bullet$ \mysubject $\bullet$ \mytitle }
+\fancyfoot[RO]{\thepage}

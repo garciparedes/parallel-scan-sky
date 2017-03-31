@@ -1,0 +1,131 @@
+\documentclass[10pt, a4paper,spanish]{article}
+
+\usepackage{mystyle}
+\usepackage{myvars}
+
+
+
+%-----------------------------
+
+\begin{document}
+
+	\maketitle % Insert title
+
+	\thispagestyle{fancy} % All pages have headers and footers
+
+
+%-----------------------------
+%	ABSTRACT
+%-----------------------------
+
+	\begin{abstract}
+		\noindent En este documento se relatan el conjunto de mejoras aplicadas a un código secuencial base. El modelo de paralelización utilizado para dicha tarea ha sido \emph{memoria distribuida}, para lo cual se ha utilizado el framework \emph{MPICH}\cite{tool:mpich} en su versión para el lenguaje de programación \emph{C}. El código fuente obtenido tras dichas optimizaciones se podrá consultar a través de \url{https://github.com/garciparedes/parallel-scan-sky/blob/master/mpi/src/ScanSky_mpi.c}\cite{code:parallel-scan-sky}
+	\end{abstract}
+
+%-----------------------------
+%	TEXT
+%-----------------------------
+
+
+	\section{Introducción}
+
+		\paragraph{}
+		En este documento se exponen el conjunto de mejoras realizadas sobre \say{un código secuencial para contar el número de objetos diferentes que se ven en una imagen o fotografía celeste, en general de espacio profundo, obtenida por un radiotelescopio}\cite{subject:cp}
+
+		\paragraph{}
+		\say{Las imágenes ya han sido procesadas, discretizando la luminosidad observada en cada punto en 16 diferentes niveles de grises o colores. Los pixels del fondo del espacio, una vez eliminado el ruido, tienen el índice de color 0. Los pixels de la imagen con una luminosidad o color suficientemente parecidos se representan con un mismo valor entre 1 y 15.}\cite{subject:cp}
+
+		\paragraph{}
+		\say{La imagen se carga en una matriz desde un fichero de texto plano. El fichero contiene un número entero en cada línea. Las dos primeras líneas contienen el número de filas y columnas de la imagen. El resto son números entre 0 y 15 con los valores de cada pixel, ordenados por filas.}\cite{subject:cp}
+
+		\paragraph{}
+		\say{Los pixels del mismo índice de color que están juntos, en horizontal o vertical (no en diagonal), se considera que son del mismo objeto. El programa etiqueta cada objeto de la imagen con una etiqueta diferente. Todos los pixels del mismo objeto tendrán la misma etiqueta. Para determinar el número de objetos, al final se cuentan el número de etiquetas diferentes. Los píxeles de índice 0 no se etiquetan.}\cite{subject:cp}
+
+	\section{Optimización}
+
+		\paragraph{}
+		Puesto que las optimizaciones a nivel de paralelización se han llevado a cabo a partir de la especificación \emph{MPI}, la primera tarea es realizar las tareas de inicialización tal y como se indica en dicha especificación. Esto se muestra en la figura \ref{code:init}.
+
+		\begin{figure}[h]
+			\centering
+			\inputminted{c}{./code/init.c}
+			\caption{Inicialización del entorno MPI}
+			\label{code:init}
+		\end{figure}
+
+		\paragraph{}
+		La alternativa escogida como modelo de paralelización ha sido la división de la matriz en bloques equiespaciados dependientes a nivel de filas. Por lo tanto (y debido a la restricción impuesta a priori que restringe la lectura de datos a un único proceso), el primer paso es transferir el número de filas y columnas que contiene el fichero de entrada al resto de procesos, para después calcular el desplazamiento correspondiente para dicho proceso (mismo para todos excepto para el último en los casos en que corresponda). Además se define el \emph{tipo de datos contiguo} que será utilizado posteriormente para la comunicación entre procesos. Esto se muestra en la figura \ref{code:op1}.
+
+		\begin{figure}[h]
+			\centering
+			\inputminted{c}{./code/op1.c}
+			\caption{Transferencia del número de filas y columnas, cálculo del desplazamiento correspondiente e incialización de tipo de datos contiguo}
+			\label{code:op1}
+		\end{figure}
+
+		\paragraph{}
+		El siguiente paso es la transferencia de la matriz de entrada a cada proceso según corresponda. Se ha preferido una implementación manual de dicha tarea por las siguientes razones: \begin {enumerate*} [label=\itshape\alph*\upshape)]
+					\item la ineficiencia derivada de transmitir la matriz completa a cada uno de los procesos y
+					\item la necesidad de solapamiento entre las particiones.
+		\end {enumerate*} Por lo tanto, no es posible utilizar la función \emph{scatter()} e ineficiente utilizar la función \emph{broadcast()}. Por contra, no se aprovechan las ventajas de transmisión jerárquica implementadas por \emph{MPICH}, pero debido al relativamente reducido tamaño del cluster en que se ejecutará dicha penalización es asumible. Esto se muestra en la figura \ref{code:op2}.
+
+		\begin{figure}[h]
+			\centering
+			\inputminted{c}{./code/op2.c}
+			\caption{Transmisión de la matriz de datos e inicialización de conexiones permanentes}
+			\label{code:op2}
+		\end{figure}
+
+		\paragraph{}
+		En el código de la figura \ref{code:op2}, se muestra también la inicialización de conexiones permanentes (realizadas de manera no bloqueante para tratar de aprovechar al máximo posible las capacidades de cómputo de cada proceso), que serán utilizadas en partes posteriores para transmitir la primera y última filas al proceso anterior y siguiente en el rango. También se deja abierta la recepción para no sufrir retrasos por dichas razones.
+
+		\paragraph{}
+		En la figura \ref{code:op3} se muestra el código utilizado para la recepción de filas de los procesos contiguos. No hay problemas de pérdida de mensajes debido a nuevas recepciones por las razones que se expondrán en parrafos subsiguientes. Además, se ha añadido un bucle de comprobación de cambios, utilizado para obviar el cómputo cuando no se hayan producido cambios en la matriz de resultado durante la fase anterior, ni en los bordes recibidos (esto se puede comprender fácilmente mediante la lectura del código completo).
+
+		\begin{figure}[h]
+			\centering
+			\inputminted{c}{./code/op3.c}
+			\caption{Recepción de las filas límite de la zona de computo dedicada a cada proceso}
+			\label{code:op3}
+		\end{figure}
+
+		\paragraph{}
+		Una vez realizadas las operaciones pertinente, es necesario transferir los resultados de los bordes a los procesos contiguos. Esto se muestra en la figura \ref{code:op4}. Además se realiza la compartición del \emph{flagCambio} entre todos los procesos mediante la función \emph{allReduce()} de manera no bloqueante. Se espera a los resultados de dicha operación solo en el caso en que la durante la iteración correspondiente no se hayan hecho modificaciones en la matriz de resultados. La razón por la cual no surgen conflictos derivados de la recepción de filas viene propiciada por el punto de envio de los mismos, que se hace una vez que ha finalizado la compartición de \emph{flagCambio}. Por tanto, dicha instrucción actua también como barrera de sincronización entre procesos.
+
+		\begin{figure}[h]
+			\centering
+			\inputminted{c}{./code/op4.c}
+			\caption{Envío de las filas límite de la zona de cómputo dedicada a cada proceso y sincronización de \emph{flagCambio}}
+			\label{code:op4}
+		\end{figure}
+
+		\paragraph{}
+		Una vez completado el bucle de propagación de celdas con la misma figura, el siguiente paso es realizar el conteo de las figuras que contienen cada una de las partes de la matriz, el último paso es transferir los resultados parciales a través de la función \emph{reduce()} al proceso inicial encargado de devolver los resultados una vez finalizado el programa. Dicha labor se muestra en la figura \ref{code:op5}.
+
+		\begin{figure}[h]
+			\centering
+			\inputminted{c}{./code/op5.c}
+			\caption{[TODO]}
+			\label{code:op5}
+		\end{figure}
+
+		\paragraph{}
+		En esta descripción se han obviado las modificaciones no referidas a optimizaciones a nivel de paralelización por razones de simplicidad. Nótese que se ha tratado de reducir al máximo el espacio necesario para las tareas de cómputo, reservando en cada caso el mínimo tamaño de memoria posible.
+
+
+	\section{Conclusiones y Propuestas Futuras}
+
+		\paragraph{}
+		La adaptación de código secuencial a código paralelo a nivel de memoria distribuida no es una tarea trivial, ya que además del nivel de dificultad derivado con tareas de sincronización, se añade el derivado de la necesidad de comunicación explicita entre procesos, algo que en el modelo de memoria compartida con hilos no sucede.
+
+		\paragraph{}
+		Debido a las restricciones temporales para realizar el trabajo que se ha descrito en este documento, no ha sido posible implementar técnicas de reequilibrado de carga. A pesar de ello se cree que podría ser interesante llevarlo a cabo para entradas de datos de gran tamaño mediante un patron \emph{job-stealing} entre procesos contiguos, lo cual compensaría los costes de comunicación en gran medida sobre clusters heterogéneos. 
+
+%-----------------------------
+%	Bibliographic references
+%-----------------------------
+	\nocite{subject:cp}
+  \bibliographystyle{acm}
+  \bibliography{bib/misc}
+
+\end{document}
