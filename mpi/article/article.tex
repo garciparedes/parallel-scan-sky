@@ -44,9 +44,73 @@
 	\section{Optimización}
 
 		\paragraph{}
+		Puesto que las optimizaciones a nivel de paralelización se han llevado a cabo a partir de la especificación \emph{MPI}, la primera tarea es realizar las tareas de inicialización tal y como se indica en dicha especificación. Esto se muestra en la figura \ref{code:init}.
+
+		\begin{figure}[H]
+			\centering
+			\inputminted{c}{./code/init.c}
+			\caption{Inicialización del entorno MPI}
+			\label{code:init}
+		\end{figure}
+
+		\paragraph{}
+		La alternativa escogida como modelo de paralelización ha sido la división de la matriz en bloques equiespaciados dependientes a nivel de filas. Por lo tanto (y debido a la restricción impuesta a priori que restringe la lectura de datos a un único proceso), el primer paso es transferir el número de filas y columnas que contiene el fichero de entrada al resto de procesos, para después calcular el desplazamiento correspondiente para dicho proceso (mismo para todos excepto para el último en los casos en que corresponda). Además se define el \emph{tipo de datos contiguo} que será utilizado posteriormente para la comunicación entre procesos. Esto se muestra en la figura \ref{code:op1}.
+
+		\begin{figure}[H]
+			\centering
+			\inputminted{c}{./code/op1.c}
+			\caption{Transferencia del número de filas y columnas, cálculo del desplazamiento correspondiente e incialización de tipo de datos contiguo}
+			\label{code:op1}
+		\end{figure}
+
+		\paragraph{}
+		El siguiente paso es la transferencia de la matriz de entrada a cada proceso según corresponda. Se ha preferido una implementación manual de dicha tarea por las siguientes razones: \begin {enumerate*} [label=\itshape\alph*\upshape)]
+					\item la ineficiencia derivada de transmitir la matriz completa a cada uno de los procesos y
+					\item la necesidad de solapamiento entre las particiones.
+		\end {enumerate*} Por lo tanto, no es posible utilizar la función \emph{scatter()} e ineficiente utilizar la función \emph{broadcast()}. Por contra, no se aprovechan las ventajas de transmisión jerárquica implementadas por \emph{MPICH}, pero debido al relativamente reducido tamaño del cluster en que se ejecutará dicha penalización es asumible. Esto se muestra en la figura \ref{code:op2}.
+
+		\begin{figure}[H]
+			\centering
+			\inputminted{c}{./code/op2.c}
+			\caption{Transmisión de la matriz de datos e inicialización de conexiones permanentes}
+			\label{code:op2}
+		\end{figure}
+
+		\paragraph{}
+		En el código de la figura \ref{code:op2}, se muestra también la inicialización de conexiones permanentes, que serán utilizadas en partes posteriores para transmitir la primera y última filas al proceso anterior y siguiente en el rango. También se deja abierta la recepción para no sufrir retrasos por dichas razones.
+
+		\paragraph{}
+		En la figura \ref{code:op3} se muestra el código utilizado para la recepción de filas de los procesos contiguos. No hay problemas de pérdida de mensajes debido a nuevas recepciones por las razones que se expondrán en parrafos subsiguientes. Además, se ha añadido un bucle de comprobación de cambios, utilizado para obviar el cómputo cuando no se hayan producido cambios en la matriz de resultado durante la fase anterior, ni en los bordes recibidos (esto se puede comprender fácilmente mediante la lectura del código completo).
+
+		\begin{figure}[H]
+			\centering
+			\inputminted{c}{./code/op3.c}
+			\caption{Recepción de las filas límite de la zona de computo dedicada a cada proceso}
+			\label{code:op3}
+		\end{figure}
+
+		\paragraph{}
+		Una vez realizadas las operaciones pertinente, es necesario transferir los resultados de los bordes a los procesos contiguos. Esto se muestra en la figura \ref{code:op4}. Además se realiza la compartición del \emph{flagCambio} entre todos los procesos mediante la función \emph{allReduce()} de manera no bloqueante. Se espera a los resultados de dicha operación solo en el caso en que la durante la iteración correspondiente no se hayan hecho modificaciones en la matriz de resultados. La razón por la cual no surgen conflictos derivados de la recepción de filas viene propiciada por el punto de envio de los mismos, que se hace una vez que ha finalizado la compartición de \emph{flagCambio}. Por tanto, dicha instrucción actua también como barrera de sincronización entre procesos.
+
+		\begin{figure}[H]
+			\centering
+			\inputminted{c}{./code/op4.c}
+			\caption{[TODO]}
+			\label{code:op4}
+		\end{figure}
+
+		\paragraph{}
 		[TODO ]
 
-	\section{Conclusiones}
+		\begin{figure}[H]
+			\centering
+			\inputminted{c}{./code/op5.c}
+			\caption{[TODO]}
+			\label{code:op5}
+		\end{figure}
+
+
+	\section{Conclusiones y Propuestas Futuras}
 
 		\paragraph{}
 		[TODO ]
