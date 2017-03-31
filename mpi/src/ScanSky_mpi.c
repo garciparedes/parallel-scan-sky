@@ -48,6 +48,7 @@ int main (int argc, char* argv[])
 	int *temp=NULL;
 
 	int local_numBlocks=-1;
+	int *rows_columns = (int *)malloc( 2 * sizeof(int) );
 
 	int row_shift =-1;
 	int column_shift =-1;
@@ -59,7 +60,7 @@ int main (int argc, char* argv[])
 	int flagCambio=-1;
 	int local_flagCambio=-1;
 	MPI_Request *request = (MPI_Request *)malloc( 5 * sizeof(MPI_Request) );
-	MPI_Datatype column_type;
+	MPI_Datatype row_type;
 
 	MPI_Init(&argc, &argv);
 	MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
@@ -86,38 +87,38 @@ int main (int argc, char* argv[])
 
 		/* 2.2 Leo valores del fichero */
 		int valor;
-		fscanf (f, "%d\n", &rows);
-		fscanf (f, "%d\n", &columns);
+		fscanf (f, "%d\n", &rows_columns[0]);
+		fscanf (f, "%d\n", &rows_columns[1]);
 		// Añado dos filas y dos columnas mas para los bordes
-		rows=rows+2;
-		columns = columns+2;
+		rows_columns[0]=rows_columns[0]+2;
+		rows_columns[1] = rows_columns[1]+2;
 
 		/* 2.3 Reservo la memoria necesaria para la matriz de datos */
-		matrixData= (int *)malloc( rows*(columns) * sizeof(int) );
+		matrixData= (int *)malloc( rows_columns[0]*(rows_columns[1]) * sizeof(int) );
 		if ( (matrixData == NULL)   ) {
 			perror ("Error reservando memoria");
 			return -1;
 		}
 
 		/* 2.4 Inicializo matrices */
-		for(i=0;i< rows; i++){
-			for(j=0;j< columns; j++){
-				matrixData[i*(columns)+j]=-1;
+		for(i=0;i< rows_columns[0]; i++){
+			for(j=0;j< rows_columns[1]; j++){
+				matrixData[i*(rows_columns[1])+j]=-1;
 			}
 		}
 		/* 2.5 Relleno bordes de la matriz */
-		for(i=1;i<rows-1;i++){
-			matrixData[i*(columns)+0]=0;
-			matrixData[i*(columns)+columns-1]=0;
+		for(i=1;i<rows_columns[0]-1;i++){
+			matrixData[i*(rows_columns[1])+0]=0;
+			matrixData[i*(rows_columns[1])+rows_columns[1]-1]=0;
 		}
-		for(i=1;i<columns-1;i++){
-			matrixData[0*(columns)+i]=0;
-			matrixData[(rows-1)*(columns)+i]=0;
+		for(i=1;i<rows_columns[1]-1;i++){
+			matrixData[0*(rows_columns[1])+i]=0;
+			matrixData[(rows_columns[0]-1)*(rows_columns[1])+i]=0;
 		}
 		/* 2.6 Relleno la matriz con los datos del fichero */
-		for(i=1;i<rows-1;i++){
-			for(j=1;j<columns-1;j++){
-				fscanf (f, "%d\n", &matrixData[i*(columns)+j]);
+		for(i=1;i<rows_columns[0]-1;i++){
+			for(j=1;j<rows_columns[1]-1;j++){
+				fscanf (f, "%d\n", &matrixData[i*(rows_columns[1])+j]);
 			}
 		}
 
@@ -126,9 +127,9 @@ int main (int argc, char* argv[])
 
 		#ifdef WRITE
 		printf("Inicializacion \n");
-		for(i=0;i<rows;i++){
-			for(j=0;j<columns;j++){
-				printf ("%d\t", matrixData[i*(columns)+j]);
+		for(i=0;i<rows_columns[0];i++){
+			for(j=0;j<rows_columns[1];j++){
+				printf ("%d\t", matrixData[i*(rows_columns[1])+j]);
 			}
 			printf("\n");
 		}
@@ -138,33 +139,32 @@ int main (int argc, char* argv[])
 		/* PUNTO DE INICIO MEDIDA DE TIEMPO */
 		t_ini = cp_Wtime();
 	}
-	MPI_Ibcast(&rows, 1, MPI_INT, 0, MPI_COMM_WORLD, &request[0]);
-	MPI_Ibcast(&columns, 1, MPI_INT, 0, MPI_COMM_WORLD, &request[1]);
+	MPI_Ibcast(rows_columns, 2, MPI_INT, 0, MPI_COMM_WORLD, &request[0]);
 
 	if (world_rank != 0){
-		MPI_Waitall(2, request, MPI_STATUS_IGNORE);
+		MPI_Wait(&request[0], MPI_STATUS_IGNORE);
 	}
-	MPI_Type_contiguous( columns-2, MPI_INT, &column_type );
-	MPI_Type_commit(&column_type);
+	MPI_Type_contiguous( rows_columns[1]-2, MPI_INT, &row_type );
+	MPI_Type_commit(&row_type);
 
-	row_shift = (rows)/world_size;
+	row_shift = (rows_columns[0])/world_size;
 
 	row_init = 1;
 	row_end = row_shift +1;
 
 	if(world_rank == world_size-1){
-		row_end = (rows-1)- (row_shift*(world_size-1));
+		row_end = (rows_columns[0]-1)- (row_shift*(world_size-1));
 	}
 
 	//
 	// EL CODIGO A PARALELIZAR COMIENZA AQUI
 	//
 	if (world_rank != 0){
-		matrixData= (int *)malloc( (2 + row_end - row_init)*(columns) * sizeof(int) );
+		matrixData= (int *)malloc( (2 + row_end - row_init)*(rows_columns[1]) * sizeof(int) );
 	}
 	/* 3. Etiquetado inicial */
-	matrixResult= (int *)malloc( (2 + row_end - row_init)*(columns) * sizeof(int) );
-	matrixResultCopy= (int *)malloc( (2 + row_end - row_init)*(columns) * sizeof(int) );
+	matrixResult= (int *)malloc( (2 + row_end - row_init)*(rows_columns[1]) * sizeof(int) );
+	matrixResultCopy= (int *)malloc( (2 + row_end - row_init)*(rows_columns[1]) * sizeof(int) );
 	if ( (matrixResult == NULL)  || (matrixResultCopy == NULL)  ) {
 		perror ("Error reservando memoria");
 		return -1;
@@ -173,40 +173,40 @@ int main (int argc, char* argv[])
 
 		if (world_rank == 0){
 			for(i = 1; i < world_size-1; i++ ){
-				MPI_Isend(&matrixData[(row_shift*i)*(columns)],
-					(row_shift + 2)*columns,
+				MPI_Isend(&matrixData[(row_shift*i)*(rows_columns[1])],
+					(row_shift + 2)*rows_columns[1],
 					MPI_INT, i, 0, MPI_COMM_WORLD, &request[0]);
 			}
-			MPI_Isend(&matrixData[(row_shift*(world_size-1))*(columns)],
-				((rows) - (row_shift*(world_size-1)))*columns,
+			MPI_Isend(&matrixData[(row_shift*(world_size-1))*(rows_columns[1])],
+				((rows_columns[0]) - (row_shift*(world_size-1)))*rows_columns[1],
 				MPI_INT, world_size-1, 0, MPI_COMM_WORLD, &request[0]);
 		} else {
-			MPI_Recv(&matrixData[(row_init-1)*(columns)], (2 + row_end - row_init)*columns,
-				MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+			MPI_Irecv(&matrixData[(row_init-1)*(rows_columns[1])], (2 + row_end - row_init)*rows_columns[1],
+				MPI_INT, 0, 0, MPI_COMM_WORLD, &request[4]);
+			MPI_Recv_init(&matrixResultCopy[(row_init-1)*rows_columns[1]+1], 1,
+				row_type, world_left, 0, MPI_COMM_WORLD, &request[1]);
+			MPI_Send_init(&matrixResultCopy[(row_init)*rows_columns[1]+1], 1,
+				row_type, world_left, 0, MPI_COMM_WORLD, &request[3]);
+			MPI_Start(&request[1]);
+			MPI_Wait(&request[4], MPI_STATUS_IGNORE);
 		}
-
 		if (world_rank != world_size - 1) {
-			MPI_Send_init(&matrixResult[(row_end-1)*columns+1], 1,
-				column_type, world_right, 0, MPI_COMM_WORLD, &request[2]);
-			MPI_Recv_init(&matrixResultCopy[(row_end)*columns+1], 1,
-				column_type, world_right, 0, MPI_COMM_WORLD, &request[0]);
-		}
-		if (world_rank != 0) {
-			MPI_Send_init(&matrixResult[(row_init)*columns+1], 1,
-				column_type, world_left, 0, MPI_COMM_WORLD, &request[3]);
-			MPI_Recv_init(&matrixResultCopy[(row_init-1)*columns+1], 1,
-				column_type, world_left, 0, MPI_COMM_WORLD, &request[1]);
+			MPI_Recv_init(&matrixResultCopy[(row_end)*rows_columns[1]+1], 1,
+				row_type, world_right, 0, MPI_COMM_WORLD, &request[0]);
+			MPI_Send_init(&matrixResultCopy[(row_end-1)*rows_columns[1]+1], 1,
+				row_type, world_right, 0, MPI_COMM_WORLD, &request[2]);
+			MPI_Start(&request[0]);
 		}
 	}
 
 	for(i=row_init-1;i< row_end+1; i++){
-		const int t1 = (i+row_shift*world_rank)*columns;
-		for(j=0;j< columns; j++){
+		const int t1 = (i+row_shift*world_rank)*rows_columns[1];
+		for(j=0;j< rows_columns[1]; j++){
 			// Si es 0 se trata del fondo y no lo computamos
-			if(matrixData[i*(columns)+j]!=0){
-				matrixResult[i*(columns)+j]=t1+j;
+			if(matrixData[i*(rows_columns[1])+j]!=0){
+				matrixResult[i*(rows_columns[1])+j]=t1+j;
 			} else {
-				matrixResult[i*(columns)+j]=-1;
+				matrixResult[i*(rows_columns[1])+j]=-1;
 			}
 		}
 	}
@@ -220,89 +220,86 @@ int main (int argc, char* argv[])
 
 	/* 4.2 Busqueda de los bloques similiares */
 	for(t=0; local_flagCambio !=0 || flagCambio !=0; t++){
-		temp = matrixResultCopy;
-		matrixResultCopy = matrixResult;
-		matrixResult = temp;
+
 
 		/* 4.2.1 Actualizacion copia */
-		if (world_size != 1) {
-			if (t != 0){
-				if (world_rank == world_size -1 ) {
-					MPI_Wait(&request[1], MPI_STATUS_IGNORE);
-					if (!local_flagCambio){
-						for(j = 1; j < columns-1;j++){
-							if (matrixResult[(row_init-1)*columns+j] !=
-								matrixResultCopy[(row_init-1)*columns+j]) {
-								local_flagCambio = 1;
-								break;
-							}
+		if (world_size != 1 && t != 0){
+			if (world_rank == world_size -1 ) {
+				MPI_Wait(&request[1], MPI_STATUS_IGNORE);
+				MPI_Start(&request[1]);
+				if (!local_flagCambio){
+					for(j = 1; j < rows_columns[1]-1;j++){
+						if (matrixResult[(row_init-1)*rows_columns[1]+j] !=
+							matrixResultCopy[(row_init-1)*rows_columns[1]+j]) {
+							local_flagCambio = 1;
+							break;
 						}
 					}
-				} else if (world_rank == 0 ) {
-					MPI_Wait(&request[0], MPI_STATUS_IGNORE);
-					if (!local_flagCambio){
-						for(j = 1; j < columns-1;j++){
-							if (matrixResult[(row_end)*columns+j]
-								!= matrixResultCopy[(row_end)*columns+j]) {
-								local_flagCambio = 1;
-								break;
-							}
+				}
+			} else if (world_rank == 0 ) {
+				MPI_Wait(&request[0], MPI_STATUS_IGNORE);
+				MPI_Start(&request[0]);
+				if (!local_flagCambio){
+					for(j = 1; j < rows_columns[1]-1;j++){
+						if (matrixResult[(row_end)*rows_columns[1]+j]
+							!= matrixResultCopy[(row_end)*rows_columns[1]+j]) {
+							local_flagCambio = 1;
+							break;
 						}
 					}
-				} else {
-					MPI_Waitall(2, request, MPI_STATUS_IGNORE);
-					if (!local_flagCambio){
-						for(j = 1; j < columns-1;j++){
-							if (matrixResult[(row_init-1)*columns+j]!=
-								matrixResultCopy[(row_init-1)*columns+j]) {
-								local_flagCambio = 1;
-								break;
-							}
-							if (matrixResult[(row_end)*columns+j]!=
-								matrixResultCopy[(row_end)*columns+j]) {
-								local_flagCambio = 1;
-								break;
-							}
+				}
+			} else {
+				MPI_Waitall(2, request, MPI_STATUS_IGNORE);
+				MPI_Startall(2,request);
+				if (!local_flagCambio){
+					for(j = 1; j < rows_columns[1]-1;j++){
+						if (matrixResult[(row_init-1)*rows_columns[1]+j]!=
+							matrixResultCopy[(row_init-1)*rows_columns[1]+j]) {
+							local_flagCambio = 1;
+							break;
+						}
+						if (matrixResult[(row_end)*rows_columns[1]+j]!=
+							matrixResultCopy[(row_end)*rows_columns[1]+j]) {
+							local_flagCambio = 1;
+							break;
 						}
 					}
 				}
 			}
-			if (world_rank != world_size - 1) {
-				MPI_Start(&request[0]);
-			}
-			if (world_rank != 0) {
-				MPI_Start(&request[1]);
-			}
+
 		}
+		temp = matrixResultCopy;
+		matrixResultCopy = matrixResult;
+		matrixResult = temp;
 		if (local_flagCambio) {
 			local_flagCambio = 0;
 			/* 4.2.2 Computo y detecto si ha habido cambios */
 			for(i=row_init;i<row_end;i++){
-				for(j=1;j<columns-1;j++){
-					if(matrixResult[i*columns+j] != -1){
-						matrixResult[i*columns+j] = matrixResultCopy[i*columns+j];
-						if((matrixData[(i-1)*columns+j] == matrixData[i*columns+j]) &&
-						    (matrixResult[i*columns+j] > matrixResultCopy[(i-1)*columns+j]))
+				for(j=1;j<rows_columns[1]-1;j++){
+					if(matrixResult[i*rows_columns[1]+j] != -1){
+						matrixResult[i*rows_columns[1]+j] = matrixResultCopy[i*rows_columns[1]+j];
+						if((matrixData[(i-1)*rows_columns[1]+j] == matrixData[i*rows_columns[1]+j]) &&
+						    (matrixResult[i*rows_columns[1]+j] > matrixResultCopy[(i-1)*rows_columns[1]+j]))
 						{
-						    matrixResult[i*columns+j] = matrixResultCopy[(i-1)*columns+j];
+						    matrixResult[i*rows_columns[1]+j] = matrixResultCopy[(i-1)*rows_columns[1]+j];
 						    local_flagCambio = 1;
 						}
-						if((matrixData[(i+1)*columns+j] == matrixData[i*columns+j]) &&
-						    (matrixResult[i*columns+j] > matrixResultCopy[(i+1)*columns+j]))
+						if((matrixData[(i+1)*rows_columns[1]+j] == matrixData[i*rows_columns[1]+j]) &&
+						    (matrixResult[i*rows_columns[1]+j] > matrixResultCopy[(i+1)*rows_columns[1]+j]))
 						{
-						    matrixResult[i*columns+j] = matrixResultCopy[(i+1)*columns+j];
+						    matrixResult[i*rows_columns[1]+j] = matrixResultCopy[(i+1)*rows_columns[1]+j];
 						    local_flagCambio = 1;
 						}
-						if((matrixData[i*columns+j-1] == matrixData[i*columns+j]) &&
-						    (matrixResult[i*columns+j] > matrixResultCopy[i*columns+j-1]))
+						if((matrixData[i*rows_columns[1]+j-1] == matrixData[i*rows_columns[1]+j]) &&
+						    (matrixResult[i*rows_columns[1]+j] > matrixResultCopy[i*rows_columns[1]+j-1]))
 						{
-						    matrixResult[i*columns+j] = matrixResultCopy[i*columns+j-1];
+						    matrixResult[i*rows_columns[1]+j] = matrixResultCopy[i*rows_columns[1]+j-1];
 						    local_flagCambio = 1;
 						}
-						if((matrixData[i*columns+j+1] == matrixData[i*columns+j]) &&
-						    (matrixResult[i*columns+j] > matrixResultCopy[i*columns+j+1]))
+						if((matrixData[i*rows_columns[1]+j+1] == matrixData[i*rows_columns[1]+j]) &&
+						    (matrixResult[i*rows_columns[1]+j] > matrixResultCopy[i*rows_columns[1]+j+1]))
 						{
-						    matrixResult[i*columns+j] = matrixResultCopy[i*columns+j+1];
+						    matrixResult[i*rows_columns[1]+j] = matrixResultCopy[i*rows_columns[1]+j+1];
 						    local_flagCambio = 1;
 						}
 					}
@@ -332,12 +329,11 @@ int main (int argc, char* argv[])
 		}
 
 
-
 		#ifdef DEBUG
 		printf("\nResultados iter %d: \n", t);
-		for(i=0;i<rows;i++){
-			for(j=0;j<columns;j++){
-				printf ("%d\t", matrixResult[i*columns+j]);
+		for(i=0;i<rows_columns[0];i++){
+			for(j=0;j<rows_columns[1];j++){
+				printf ("%d\t", matrixResult[i*rows_columns[1]+j]);
 			}
 			printf("\n");
 		}
@@ -345,14 +341,14 @@ int main (int argc, char* argv[])
 
 	}
 
-	MPI_Type_free(&column_type);
+	MPI_Type_free(&row_type);
 
 	/* 4.3 Inicio cuenta del numero de bloques */
 	local_numBlocks = 0;
 	for(i=row_init;i<row_end;i++){
-		const int t1 = (i+row_shift*world_rank)*columns;
-		for(j=1;j<columns-1;j++){
-			if(matrixResult[i*columns+j] == t1+j) local_numBlocks++;
+		const int t1 = (i+row_shift*world_rank)*rows_columns[1];
+		for(j=1;j<rows_columns[1]-1;j++){
+			if(matrixResult[i*rows_columns[1]+j] == t1+j) local_numBlocks++;
 		}
 	}
 
@@ -376,9 +372,9 @@ int main (int argc, char* argv[])
 		printf("Time: %lf\n", t_total);
 		#ifdef WRITE
 		printf("Resultado: \n");
-		for(i=0;i<rows;i++){
-			for(j=0;j<columns;j++){
-				printf ("%d\t", matrixResult[i*columns+j]);
+		for(i=0;i<rows_columns[0];i++){
+			for(j=0;j<rows_columns[1];j++){
+				printf ("%d\t", matrixResult[i*rows_columns[1]+j]);
 			}
 			printf("\n");
 		}
