@@ -36,7 +36,7 @@ int main (int argc, char* argv[])
 
 	int rows=-1;
 	int columns =-1;
-	int *matrixData=NULL;
+	char *matrixData=NULL;
 	int *matrixResult=NULL;
 	int *matrixResultCopy=NULL;
 	int numBlocks=-1;
@@ -94,7 +94,7 @@ int main (int argc, char* argv[])
 		rows_columns[1] = rows_columns[1]+2;
 
 		/* 2.3 Reservo la memoria necesaria para la matriz de datos */
-		matrixData= (int *)malloc( rows_columns[0]*(rows_columns[1]) * sizeof(int) );
+		matrixData= (char *)malloc( rows_columns[0]*(rows_columns[1]) * sizeof(char) );
 		if ( (matrixData == NULL)   ) {
 			perror ("Error reservando memoria");
 			return -1;
@@ -160,7 +160,7 @@ int main (int argc, char* argv[])
 	// EL CODIGO A PARALELIZAR COMIENZA AQUI
 	//
 	if (world_rank != 0){
-		matrixData= (int *)malloc( (2 + row_end - row_init)*(rows_columns[1]) * sizeof(int) );
+		matrixData= (char *)malloc( (2 + row_end - row_init)*(rows_columns[1]) * sizeof(char) );
 	}
 	/* 3. Etiquetado inicial */
 	matrixResult= (int *)malloc( (2 + row_end - row_init)*(rows_columns[1]) * sizeof(int) );
@@ -175,14 +175,14 @@ int main (int argc, char* argv[])
 			for(i = 1; i < world_size-1; i++ ){
 				MPI_Isend(&matrixData[(row_shift*i)*(rows_columns[1])],
 					(row_shift + 2)*rows_columns[1],
-					MPI_INT, i, 0, MPI_COMM_WORLD, &request[0]);
+					MPI_CHAR, i, 0, MPI_COMM_WORLD, &request[0]);
 			}
 			MPI_Isend(&matrixData[(row_shift*(world_size-1))*(rows_columns[1])],
 				((rows_columns[0]) - (row_shift*(world_size-1)))*rows_columns[1],
-				MPI_INT, world_size-1, 0, MPI_COMM_WORLD, &request[0]);
+				MPI_CHAR, world_size-1, 0, MPI_COMM_WORLD, &request[0]);
 		} else {
 			MPI_Irecv(&matrixData[(row_init-1)*(rows_columns[1])], (2 + row_end - row_init)*rows_columns[1],
-				MPI_INT, 0, 0, MPI_COMM_WORLD, &request[4]);
+				MPI_CHAR, 0, 0, MPI_COMM_WORLD, &request[4]);
 			MPI_Recv_init(&matrixResultCopy[(row_init-1)*rows_columns[1]+1], 1,
 				row_type, world_left, 0, MPI_COMM_WORLD, &request[1]);
 			MPI_Send_init(&matrixResultCopy[(row_init)*rows_columns[1]+1], 1,
