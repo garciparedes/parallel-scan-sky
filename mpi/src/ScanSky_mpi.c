@@ -273,8 +273,78 @@ int main (int argc, char* argv[])
 		matrixResult = temp;
 		if (local_flagCambio) {
 			local_flagCambio = 0;
+			i = row_init;
 			/* 4.2.2 Computo y detecto si ha habido cambios */
-			for(i=row_init;i<row_end;i++){
+			for(j=1;j<rows_columns[1]-1;j++){
+				if(matrixResult[i*rows_columns[1]+j] != -1){
+					matrixResult[i*rows_columns[1]+j] = matrixResultCopy[i*rows_columns[1]+j];
+					if((matrixData[(i-1)*rows_columns[1]+j] == matrixData[i*rows_columns[1]+j]) &&
+						(matrixResult[i*rows_columns[1]+j] > matrixResultCopy[(i-1)*rows_columns[1]+j]))
+					{
+						matrixResult[i*rows_columns[1]+j] = matrixResultCopy[(i-1)*rows_columns[1]+j];
+						local_flagCambio = 1;
+					}
+					if((matrixData[(i+1)*rows_columns[1]+j] == matrixData[i*rows_columns[1]+j]) &&
+						(matrixResult[i*rows_columns[1]+j] > matrixResultCopy[(i+1)*rows_columns[1]+j]))
+					{
+						matrixResult[i*rows_columns[1]+j] = matrixResultCopy[(i+1)*rows_columns[1]+j];
+						local_flagCambio = 1;
+					}
+					if((matrixData[i*rows_columns[1]+j-1] == matrixData[i*rows_columns[1]+j]) &&
+						(matrixResult[i*rows_columns[1]+j] > matrixResultCopy[i*rows_columns[1]+j-1]))
+					{
+						matrixResult[i*rows_columns[1]+j] = matrixResultCopy[i*rows_columns[1]+j-1];
+						local_flagCambio = 1;
+					}
+					if((matrixData[i*rows_columns[1]+j+1] == matrixData[i*rows_columns[1]+j]) &&
+						(matrixResult[i*rows_columns[1]+j] > matrixResultCopy[i*rows_columns[1]+j+1]))
+					{
+						matrixResult[i*rows_columns[1]+j] = matrixResultCopy[i*rows_columns[1]+j+1];
+						local_flagCambio = 1;
+					}
+				}
+			}
+
+			if (world_size != 1 && world_rank != 0) {
+				MPI_Wait(&request[3], MPI_STATUS_IGNORE);
+				MPI_Start(&request[3]);
+			}
+			i = row_end-1;
+			for(j=1;j<rows_columns[1]-1;j++){
+				if(matrixResult[i*rows_columns[1]+j] != -1){
+					matrixResult[i*rows_columns[1]+j] = matrixResultCopy[i*rows_columns[1]+j];
+					if((matrixData[(i-1)*rows_columns[1]+j] == matrixData[i*rows_columns[1]+j]) &&
+						(matrixResult[i*rows_columns[1]+j] > matrixResultCopy[(i-1)*rows_columns[1]+j]))
+					{
+						matrixResult[i*rows_columns[1]+j] = matrixResultCopy[(i-1)*rows_columns[1]+j];
+						local_flagCambio = 1;
+					}
+					if((matrixData[(i+1)*rows_columns[1]+j] == matrixData[i*rows_columns[1]+j]) &&
+						(matrixResult[i*rows_columns[1]+j] > matrixResultCopy[(i+1)*rows_columns[1]+j]))
+					{
+						matrixResult[i*rows_columns[1]+j] = matrixResultCopy[(i+1)*rows_columns[1]+j];
+						local_flagCambio = 1;
+					}
+					if((matrixData[i*rows_columns[1]+j-1] == matrixData[i*rows_columns[1]+j]) &&
+						(matrixResult[i*rows_columns[1]+j] > matrixResultCopy[i*rows_columns[1]+j-1]))
+					{
+						matrixResult[i*rows_columns[1]+j] = matrixResultCopy[i*rows_columns[1]+j-1];
+						local_flagCambio = 1;
+					}
+					if((matrixData[i*rows_columns[1]+j+1] == matrixData[i*rows_columns[1]+j]) &&
+						(matrixResult[i*rows_columns[1]+j] > matrixResultCopy[i*rows_columns[1]+j+1]))
+					{
+						matrixResult[i*rows_columns[1]+j] = matrixResultCopy[i*rows_columns[1]+j+1];
+						local_flagCambio = 1;
+					}
+				}
+			}
+			if (world_size != 1 && world_rank != world_size - 1) {
+				MPI_Wait(&request[2], MPI_STATUS_IGNORE);
+				MPI_Start(&request[2]);
+			}
+
+			for(i=row_init+1;i<row_end-1;i++){
 				for(j=1;j<rows_columns[1]-1;j++){
 					if(matrixResult[i*rows_columns[1]+j] != -1){
 						matrixResult[i*rows_columns[1]+j] = matrixResultCopy[i*rows_columns[1]+j];
@@ -305,12 +375,7 @@ int main (int argc, char* argv[])
 					}
 				}
 			}
-		}
-
-		if (world_size != 1) {
-			if(t !=  0){
-				MPI_Wait(&request[4], MPI_STATUS_IGNORE);
-			}
+		} else if (world_size != 1) {
 			if (world_rank != world_size - 1) {
 				MPI_Wait(&request[2], MPI_STATUS_IGNORE);
 				MPI_Start(&request[2]);
@@ -319,6 +384,13 @@ int main (int argc, char* argv[])
 				MPI_Wait(&request[3], MPI_STATUS_IGNORE);
 				MPI_Start(&request[3]);
 			}
+		}
+
+		if (world_size != 1) {
+			if(t !=  0){
+				MPI_Wait(&request[4], MPI_STATUS_IGNORE);
+			}
+
 			flagCambio=0;
 			MPI_Iallreduce(&local_flagCambio, &flagCambio, 1, MPI_CHAR, MPI_LOR,
 				MPI_COMM_WORLD, &request[4]);
