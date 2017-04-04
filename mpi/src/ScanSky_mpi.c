@@ -162,10 +162,7 @@ int main (int argc, char* argv[])
 	}
 
 	if (world_rank != 0){
-		matrixData= (int *)malloc( (2 + row_end - row_init)*(rows_columns[1]) * sizeof(int) );
-		for(i = 0; i < (2 + row_end - row_init)*(rows_columns[1]); i++){
-			matrixData[i] = 0;
-		}
+		matrixData= (int *)calloc( (2 + row_end - row_init)*(rows_columns[1]), sizeof(int) );
 	}
 	/* 3. Etiquetado inicial */
 	matrixResult= (int *)malloc( (2 + row_end - row_init)*(rows_columns[1]) * sizeof(int) );
