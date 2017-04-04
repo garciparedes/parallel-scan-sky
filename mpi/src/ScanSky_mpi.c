@@ -36,7 +36,7 @@ int main (int argc, char* argv[])
 
 	int rows=-1;
 	int columns =-1;
-	char *matrixData=NULL;
+	int *matrixData=NULL;
 	int *matrixResult=NULL;
 	int *matrixResultCopy=NULL;
 	int numBlocks=-1;
@@ -59,8 +59,10 @@ int main (int argc, char* argv[])
 	int t=-1;
 	int flagCambio=-1;
 	int local_flagCambio=-1;
-	MPI_Request *request = (MPI_Request *)malloc( 5 * sizeof(MPI_Request) );
+
 	MPI_Datatype row_type;
+	MPI_Datatype data_type;
+	MPI_Request *request = (MPI_Request *)malloc( 5 * sizeof(MPI_Request) );
 
 	MPI_Init(&argc, &argv);
 	MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
@@ -68,7 +70,6 @@ int main (int argc, char* argv[])
 
 	int world_right = (world_rank +1 ) % world_size;
 	int world_left = (world_rank -1 + world_size) % world_size;
-
 
 
 	if ( world_rank == 0 ) {
@@ -87,49 +88,47 @@ int main (int argc, char* argv[])
 
 		/* 2.2 Leo valores del fichero */
 		int valor;
-		fscanf (f, "%d\n", &rows_columns[0]);
-		fscanf (f, "%d\n", &rows_columns[1]);
+		fscanf (f, "%d\n", &rows);
+		fscanf (f, "%d\n", &columns);
 		// Añado dos filas y dos columnas mas para los bordes
-		rows_columns[0]=rows_columns[0]+2;
-		rows_columns[1] = rows_columns[1]+2;
+		rows=rows+2;
+		columns = columns+2;
 
 		/* 2.3 Reservo la memoria necesaria para la matriz de datos */
-		matrixData= (char *)malloc( rows_columns[0]*(rows_columns[1]) * sizeof(char) );
+		matrixData= (int *)malloc( rows*(columns) * sizeof(int) );
 		if ( (matrixData == NULL)   ) {
 			perror ("Error reservando memoria");
 			return -1;
 		}
 
 		/* 2.4 Inicializo matrices */
-		for(i=0;i< rows_columns[0]; i++){
-			for(j=0;j< rows_columns[1]; j++){
-				matrixData[i*(rows_columns[1])+j]=-1;
+		for(i=0;i< rows; i++){
+			for(j=0;j< columns; j++){
+				matrixData[i*(columns)+j]=-1;
 			}
 		}
 		/* 2.5 Relleno bordes de la matriz */
-		for(i=1;i<rows_columns[0]-1;i++){
-			matrixData[i*(rows_columns[1])+0]=0;
-			matrixData[i*(rows_columns[1])+rows_columns[1]-1]=0;
+		for(i=1;i<rows-1;i++){
+			matrixData[i*(columns)+0]=0;
+			matrixData[i*(columns)+columns-1]=0;
 		}
-		for(i=1;i<rows_columns[1]-1;i++){
-			matrixData[0*(rows_columns[1])+i]=0;
-			matrixData[(rows_columns[0]-1)*(rows_columns[1])+i]=0;
+		for(i=1;i<columns-1;i++){
+			matrixData[0*(columns)+i]=0;
+			matrixData[(rows-1)*(columns)+i]=0;
 		}
 		/* 2.6 Relleno la matriz con los datos del fichero */
-		for(i=1;i<rows_columns[0]-1;i++){
-			for(j=1;j<rows_columns[1]-1;j++){
-				fscanf (f, "%d\n", &matrixData[i*(rows_columns[1])+j]);
+		for(i=1;i<rows-1;i++){
+			for(j=1;j<columns-1;j++){
+				fscanf (f, "%d\n", &matrixData[i*(columns)+j]);
 			}
 		}
-
-
 		fclose(f);
 
 		#ifdef WRITE
 		printf("Inicializacion \n");
-		for(i=0;i<rows_columns[0];i++){
-			for(j=0;j<rows_columns[1];j++){
-				printf ("%d\t", matrixData[i*(rows_columns[1])+j]);
+		for(i=0;i<rows;i++){
+			for(j=0;j<columns;j++){
+				printf ("%d\t", matrixData[i*(columns)+j]);
 			}
 			printf("\n");
 		}
@@ -138,6 +137,12 @@ int main (int argc, char* argv[])
 
 		/* PUNTO DE INICIO MEDIDA DE TIEMPO */
 		t_ini = cp_Wtime();
+
+		//
+		// EL CODIGO A PARALELIZAR COMIENZA AQUI
+		//
+		rows_columns[0] = rows;
+		rows_columns[1] = columns;
 	}
 	MPI_Ibcast(rows_columns, 2, MPI_INT, 0, MPI_COMM_WORLD, &request[0]);
 
@@ -156,11 +161,8 @@ int main (int argc, char* argv[])
 		row_end = (rows_columns[0]-1)- (row_shift*(world_size-1));
 	}
 
-	//
-	// EL CODIGO A PARALELIZAR COMIENZA AQUI
-	//
 	if (world_rank != 0){
-		matrixData= (char *)malloc( (2 + row_end - row_init)*(rows_columns[1]) * sizeof(char) );
+		matrixData= (int *)malloc( (2 + row_end - row_init)*(rows_columns[1]) * sizeof(int) );
 	}
 	/* 3. Etiquetado inicial */
 	matrixResult= (int *)malloc( (2 + row_end - row_init)*(rows_columns[1]) * sizeof(int) );
@@ -172,17 +174,29 @@ int main (int argc, char* argv[])
 	if (world_size != 1) {
 
 		if (world_rank == 0){
+			MPI_Type_vector((row_shift + 2)*rows_columns[1], 1,
+				sizeof(int)/sizeof(char), MPI_CHAR, &data_type );
+			MPI_Type_commit(&data_type);
 			for(i = 1; i < world_size-1; i++ ){
-				MPI_Isend(&matrixData[(row_shift*i)*(rows_columns[1])],
-					(row_shift + 2)*rows_columns[1],
-					MPI_CHAR, i, 0, MPI_COMM_WORLD, &request[0]);
+				MPI_Isend(&matrixData[(row_shift*i)*(rows_columns[1])],1,
+					data_type, i, 0, MPI_COMM_WORLD, &request[0]);
 			}
-			MPI_Isend(&matrixData[(row_shift*(world_size-1))*(rows_columns[1])],
-				((rows_columns[0]) - (row_shift*(world_size-1)))*rows_columns[1],
-				MPI_CHAR, world_size-1, 0, MPI_COMM_WORLD, &request[0]);
+			MPI_Type_free(&data_type);
+
+			MPI_Type_vector(((rows_columns[0]) - (row_shift*(world_size-1)))*rows_columns[1],
+				1,sizeof(int)/sizeof(char), MPI_CHAR, &data_type );
+			MPI_Type_commit(&data_type);
+			MPI_Isend(&matrixData[(row_shift*(world_size-1))*(rows_columns[1])],1,
+				data_type, world_size-1, 0, MPI_COMM_WORLD, &request[0]);
+			MPI_Type_commit(&data_type);
 		} else {
-			MPI_Irecv(&matrixData[(row_init-1)*(rows_columns[1])], (2 + row_end - row_init)*rows_columns[1],
-				MPI_CHAR, 0, 0, MPI_COMM_WORLD, &request[4]);
+			MPI_Type_vector((2 + row_end - row_init)*rows_columns[1],1,
+				sizeof(int)/sizeof(char), MPI_CHAR, &data_type );
+			MPI_Type_commit(&data_type);
+			MPI_Irecv(&matrixData[(row_init-1)*(rows_columns[1])], 1,
+				data_type, 0, 0, MPI_COMM_WORLD, &request[4]);
+			MPI_Type_free(&data_type);
+
 			MPI_Recv_init(&matrixResultCopy[(row_init-1)*rows_columns[1]+1], 1,
 				row_type, world_left, 0, MPI_COMM_WORLD, &request[1]);
 			MPI_Send_init(&matrixResultCopy[(row_init)*rows_columns[1]+1], 1,
