@@ -163,6 +163,9 @@ int main (int argc, char* argv[])
 
 	if (world_rank != 0){
 		matrixData= (int *)malloc( (2 + row_end - row_init)*(rows_columns[1]) * sizeof(int) );
+		for(i = 0; i < (2 + row_end - row_init)*(rows_columns[1]); i++){
+			matrixData[i] = 0;
+		}
 	}
 	/* 3. Etiquetado inicial */
 	matrixResult= (int *)malloc( (2 + row_end - row_init)*(rows_columns[1]) * sizeof(int) );
@@ -188,13 +191,12 @@ int main (int argc, char* argv[])
 			MPI_Type_commit(&data_type);
 			MPI_Isend(&matrixData[(row_shift*(world_size-1))*(rows_columns[1])],1,
 				data_type, world_size-1, 0, MPI_COMM_WORLD, &request[0]);
-			MPI_Type_commit(&data_type);
+			MPI_Type_free(&data_type);
 		} else {
 			MPI_Type_vector((2 + row_end - row_init)*rows_columns[1],1,
 				sizeof(int)/sizeof(char), MPI_CHAR, &data_type );
 			MPI_Type_commit(&data_type);
-			MPI_Irecv(&matrixData[(row_init-1)*(rows_columns[1])], 1,
-				data_type, 0, 0, MPI_COMM_WORLD, &request[4]);
+			MPI_Irecv(matrixData, 1, data_type, 0, 0, MPI_COMM_WORLD, &request[4]);
 			MPI_Type_free(&data_type);
 
 			MPI_Recv_init(&matrixResultCopy[(row_init-1)*rows_columns[1]+1], 1,
