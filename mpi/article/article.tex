@@ -54,7 +54,7 @@
 		\end{figure}
 
 		\paragraph{}
-		La alternativa escogida como modelo de paralelización ha sido la división de la matriz en bloques equiespaciados dependientes a nivel de filas. Por lo tanto (y debido a la restricción impuesta a priori que restringe la lectura de datos a un único proceso), el primer paso es transferir el número de filas y columnas que contiene el fichero de entrada al resto de procesos, para después calcular el desplazamiento correspondiente para dicho proceso (mismo para todos excepto para el último en los casos en que corresponda). Además se define el \emph{tipo de datos contiguo} que será utilizado posteriormente para la comunicación entre procesos. Esto se muestra en la figura \ref{code:op1}.
+		La alternativa escogida como modelo de paralelización ha sido la división de la matriz en bloques equiespaciados solapados a nivel de filas. Por lo tanto (y debido a la restricción impuesta a priori que restringe la lectura de datos a un único proceso), el primer paso es transferir el número de filas y columnas que contiene el fichero de entrada al resto de procesos, para después calcular el desplazamiento correspondiente para dicho proceso (mismo para todos excepto para el último en los casos en que corresponda). Además se define el \emph{tipo de datos contiguo} que será utilizado posteriormente para la comunicación entre procesos. Esto se muestra en la figura \ref{code:op1}.
 
 		\begin{figure}[h]
 			\centering
@@ -67,7 +67,7 @@
 		El siguiente paso es la transferencia de la matriz de entrada a cada proceso según corresponda. Se ha preferido una implementación manual de dicha tarea por las siguientes razones: \begin {enumerate*} [label=\itshape\alph*\upshape)]
 					\item la ineficiencia derivada de transmitir la matriz completa a cada uno de los procesos y
 					\item la necesidad de solapamiento entre las particiones.
-		\end {enumerate*} Por lo tanto, no es posible utilizar la función \emph{scatter()} e ineficiente utilizar la función \emph{broadcast()}. Por contra, no se aprovechan las ventajas de transmisión jerárquica implementadas por \emph{MPICH}, pero debido al relativamente reducido tamaño del cluster en que se ejecutará dicha penalización es asumible. Esto se muestra en la figura \ref{code:op2}.
+		\end {enumerate*} Por lo tanto, no es posible utilizar la función \emph{scatter()} e ineficiente utilizar la función \emph{broadcast()}. Por contra, no se aprovechan las ventajas de transmisión jerárquica implementadas por \emph{MPICH}, pero debido al relativamente reducido tamaño del cluster en que se ejecutará dicha penalización es asumible. Puesto que dicha matriz está formada por valores en el rango $[0,15]$ se ha realizado un envío en forma de \emph{char} lo que reduce en un orden de \textbf{4} el tamaño de la comunicación. Para ello se ha utilizado el tipo derivado \emph{Vector} a partir del cual se lleva a cabo el desplazamiento apropiado.  Esto se muestra en la figura \ref{code:op2}.
 
 		\begin{figure}[h]
 			\centering
@@ -119,7 +119,10 @@
 		La adaptación de código secuencial a código paralelo a nivel de memoria distribuida no es una tarea trivial, ya que además del nivel de dificultad derivado con tareas de sincronización, se añade el derivado de la necesidad de comunicación explicita entre procesos, algo que en el modelo de memoria compartida con hilos no sucede.
 
 		\paragraph{}
-		Debido a las restricciones temporales para realizar el trabajo que se ha descrito en este documento, no ha sido posible implementar técnicas de reequilibrado de carga. A pesar de ello se cree que podría ser interesante llevarlo a cabo para entradas de datos de gran tamaño mediante un patron \emph{job-stealing} entre procesos contiguos, lo cual compensaría los costes de comunicación en gran medida sobre clusters heterogéneos. 
+		Una alternativa interesante a la transferencia de las filas limítrofes a los procesadores de rango contiguo, que podría aprovechar el ahorro en la comunicación al igual que se hace en el caso de la propagación de la matriz de datos, sería la transferencia únicamente de la variación de cada una de las celdas en lugar del valor completo. Debido a la falta de tiempo dicha optimización no se ha podido llevar a cabo.
+
+		\paragraph{}
+		Al igual que en el caso de la propuesta anterior, debido a las restricciones temporales para realizar el trabajo que se ha descrito en este documento, no ha sido posible implementar técnicas de reequilibrado de carga. A pesar de ello se cree que podría ser interesante llevarlo a cabo para entradas de datos de gran tamaño mediante un patron \emph{job-stealing} entre procesos contiguos, lo cual compensaría los costes de comunicación en gran medida sobre clusters heterogéneos.
 
 %-----------------------------
 %	Bibliographic references
