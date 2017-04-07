@@ -1,6 +1,17 @@
 # parallel-scan-sky
 - [tablón uva](http://frontendv.infor.uva.es/)
 
+## cuda
+
+- Usage:
+```
+cd cuda/src
+./run.sh ../../data-sets/circles1.data
+```
+
+- Docs:
+[Article](cuda/article/article.pdf)
+
 ## mpi
 
 - Usage:
