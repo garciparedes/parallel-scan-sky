@@ -32,24 +32,30 @@ __global__ void kernelCountFigures(int *matrixResult, int *count, int *rows, int
         		blockIdx.x * blockDim.x * blockDim.y +
         		blockIdx.y * blockDim.x * blockDim.y * gridDim.x;
 
-	//int i = threadIdx.x + threadIdx.y * blockDim.x;
-	//int j = threadIdx.y + blockIdx.y * blockDim.x * blockDim.y;
-
-	int j = blockIdx.y * blockDim.y + threadIdx.y;
  	int i = blockIdx.x * blockDim.x + threadIdx.x;
+	int j = blockIdx.y * blockDim.y + threadIdx.y;
 
+	int ii = blockIdx.x;
+	int jj = blockIdx.y + blockIdx.x * gridDim.x;
 
-	/*
-	if(matrixResult[index] == index) {
-		atomicAdd(count,(int) 1);
-	}
-	*/
+	//printf("%d %d\n",i, j);
 
-	if(i > 0 && i<rows[0]-1 && j > 0 && j<columns[0]-1 && matrixResult[i*columns[0]+j] == i*columns[0]+j) {
-		atomicAdd(count,(int) 1);
+	if(i > 0 && i<rows[0]-1 &&
+		j > 0 && j<columns[0]-1){
+		//printf("%d %d %d %d\n",i,j,ii,jj);
+
+		if (matrixResult[i*columns[0]+j] == i*columns[0]+j) {
+			//printf("1\n");
+			atomicAdd(&count[blockIdx.x + blockIdx.y * gridDim.x],(int) 1);
+		}
 	}
 }
 
+
+__global__ void kernelReduceCount(int *count, int *countArray) {
+	//printf("%d %d %d\n",threadIdx.x, threadIdx.y, countArray[threadIdx.x + threadIdx.y * blockDim.x] );
+	atomicAdd(count, countArray[threadIdx.x + threadIdx.y * blockDim.x]);
+}
 
 /**
 * Funcion secuencial para la busqueda de mi bloque
@@ -111,6 +117,7 @@ int main (int argc, char* argv[])
 	int *matrixResultDevice;
 	int *matrixResultCopyDevice;
 	int *numBlocksDevice;
+	int *numBlocksArrayDevice;
 
 
 
@@ -183,16 +190,21 @@ int main (int argc, char* argv[])
 //
 // EL CODIGO A PARALELIZAR COMIENZA AQUI
 //
-	//int blockColumnsShape = (columns /(columns / 1024));
-	//int blockRowsShape = (rows /(rows / 1024));
 
-	dim3 bloqShapeGpu(rows,columns);
-	dim3 gridShapeGpu(1,1);
-	
+	int rowsBloqShape = 32;
+	int columnsBloqShape = 32;
+
+	int rowsGridShape = 1;
+	int columnsGridShape = 1;
+
+	dim3 bloqShapeGpu(rowsBloqShape,columnsBloqShape);
+	dim3 gridShapeGpu(rowsGridShape,columnsGridShape);
+
 	cudaMalloc(&rowsDevice, sizeof(int));
 	cudaMalloc(&columnsDevice, sizeof(int));
 
 	cudaMalloc(&numBlocksDevice, sizeof(int));
+	cudaMalloc(&numBlocksArrayDevice, sizeof(int) * rowsGridShape * columnsGridShape);
 
 
 	cudaMemcpy(rowsDevice,&rows, sizeof(int),cudaMemcpyHostToDevice);
@@ -269,11 +281,14 @@ int main (int argc, char* argv[])
 		}
 	}
 	*/
+	cudaMemset(numBlocksDevice,0,sizeof(int));
+	cudaMemset(numBlocksArrayDevice,0,sizeof(int)*rowsGridShape * columnsGridShape);
 
-	cudaMemcpy(numBlocksDevice,&numBlocks, sizeof(int),cudaMemcpyHostToDevice);
+	//cudaMemcpy(numBlocksDevice,&numBlocks, sizeof(int),cudaMemcpyHostToDevice);
 	cudaMemcpy(matrixResultDevice,matrixResult, sizeof(int) * (int)((rows)*(columns)),cudaMemcpyHostToDevice);
 
-	kernelCountFigures<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice, numBlocksDevice, rowsDevice, columnsDevice);
+	kernelCountFigures<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice, numBlocksArrayDevice, rowsDevice, columnsDevice);
+	kernelReduceCount<<<(1,1), gridShapeGpu>>>(numBlocksDevice, numBlocksArrayDevice);
 
 	cudaMemcpy(&numBlocks,numBlocksDevice, sizeof(int),cudaMemcpyDeviceToHost);
 
@@ -306,5 +321,15 @@ int main (int argc, char* argv[])
 	free(matrixResult);
 	free(matrixResultCopy);
 
+	/*Liberamos memoria del DEVICE*/
+	cudaFree(rowsDevice);
+	cudaFree(columnsDevice);
+	cudaFree(numBlocksDevice);
+	cudaFree(numBlocksArrayDevice);
+	cudaFree(matrixResultDevice);
+	cudaFree(matrixResultCopyDevice);
+
+	/*Liberamos los hilos del DEVICE*/
+	cudaDeviceReset();
 	return 0;
 }
