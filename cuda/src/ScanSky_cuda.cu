@@ -27,34 +27,23 @@
 
 
 __global__ void kernelCountFigures(int *matrixResult, int *count, int *rows, int *columns) {
+	/*
 	int index = threadIdx.x +
 				threadIdx.y * blockDim.x +
         		blockIdx.x * blockDim.x * blockDim.y +
         		blockIdx.y * blockDim.x * blockDim.y * gridDim.x;
+	*/
 
  	int i = blockIdx.x * blockDim.x + threadIdx.x;
 	int j = blockIdx.y * blockDim.y + threadIdx.y;
 
-	int ii = blockIdx.x;
-	int jj = blockIdx.y + blockIdx.x * gridDim.x;
-
-	//printf("%d %d\n",i, j);
-
 	if(i > 0 && i<rows[0]-1 &&
 		j > 0 && j<columns[0]-1){
-		//printf("%d %d %d %d\n",i,j,ii,jj);
 
 		if (matrixResult[i*columns[0]+j] == i*columns[0]+j) {
-			//printf("1\n");
-			atomicAdd(&count[blockIdx.x + blockIdx.y * gridDim.x],(int) 1);
+			atomicAdd(&count[0],(int) 1);
 		}
 	}
-}
-
-
-__global__ void kernelReduceCount(int *count, int *countArray) {
-	//printf("%d %d %d\n",threadIdx.x, threadIdx.y, countArray[threadIdx.x + threadIdx.y * blockDim.x] );
-	atomicAdd(count, countArray[threadIdx.x + threadIdx.y * blockDim.x]);
 }
 
 /**
@@ -194,11 +183,11 @@ int main (int argc, char* argv[])
 	int rowsBloqShape = 32;
 	int columnsBloqShape = 32;
 
-	int rowsGridShape = 1;
-	int columnsGridShape = 1;
+	int rowsGridShape = 128;
+	int columnsGridShape = 128;
 
-	dim3 bloqShapeGpu(rowsBloqShape,columnsBloqShape);
-	dim3 gridShapeGpu(rowsGridShape,columnsGridShape);
+	dim3 bloqShapeGpu(rowsBloqShape,columnsBloqShape,1);
+	dim3 gridShapeGpu(rowsGridShape,columnsGridShape,1);
 
 	cudaMalloc(&rowsDevice, sizeof(int));
 	cudaMalloc(&columnsDevice, sizeof(int));
@@ -282,13 +271,10 @@ int main (int argc, char* argv[])
 	}
 	*/
 	cudaMemset(numBlocksDevice,0,sizeof(int));
-	cudaMemset(numBlocksArrayDevice,0,sizeof(int)*rowsGridShape * columnsGridShape);
 
-	//cudaMemcpy(numBlocksDevice,&numBlocks, sizeof(int),cudaMemcpyHostToDevice);
 	cudaMemcpy(matrixResultDevice,matrixResult, sizeof(int) * (int)((rows)*(columns)),cudaMemcpyHostToDevice);
 
-	kernelCountFigures<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice, numBlocksArrayDevice, rowsDevice, columnsDevice);
-	kernelReduceCount<<<(1,1), gridShapeGpu>>>(numBlocksDevice, numBlocksArrayDevice);
+	kernelCountFigures<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice, numBlocksDevice, rowsDevice, columnsDevice);
 
 	cudaMemcpy(&numBlocks,numBlocksDevice, sizeof(int),cudaMemcpyDeviceToHost);
 
