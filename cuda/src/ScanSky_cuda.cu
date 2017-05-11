@@ -24,6 +24,33 @@
 /* Substituir min por el operador */
 #define min(x,y)    ((x) < (y)? (x) : (y))
 
+
+
+__global__ void kernelCountFigures(int *matrixResult, int *count, int *rows, int *columns) {
+	int index = threadIdx.x +
+				threadIdx.y * blockDim.x +
+        		blockIdx.x * blockDim.x * blockDim.y +
+        		blockIdx.y * blockDim.x * blockDim.y * gridDim.x;
+
+	//int i = threadIdx.x + threadIdx.y * blockDim.x;
+	//int j = threadIdx.y + blockIdx.y * blockDim.x * blockDim.y;
+
+	int j = blockIdx.y * blockDim.y + threadIdx.y;
+ 	int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+
+	/*
+	if(matrixResult[index] == index) {
+		atomicAdd(count,(int) 1);
+	}
+	*/
+
+	if(i > 0 && i<rows[0]-1 && j > 0 && j<columns[0]-1 && matrixResult[i*columns[0]+j] == i*columns[0]+j) {
+		atomicAdd(count,(int) 1);
+	}
+}
+
+
 /**
 * Funcion secuencial para la busqueda de mi bloque
 */
@@ -77,6 +104,13 @@ int main (int argc, char* argv[])
 	int *matrixResult=NULL;
 	int *matrixResultCopy=NULL;
 	int numBlocks=-1;
+
+	int *rowsDevice;
+	int *columnsDevice;
+	int *matrixDataDevice=NULL;
+	int *matrixResultDevice;
+	int *matrixResultCopyDevice;
+	int *numBlocksDevice;
 
 
 
@@ -149,10 +183,27 @@ int main (int argc, char* argv[])
 //
 // EL CODIGO A PARALELIZAR COMIENZA AQUI
 //
+	//int blockColumnsShape = (columns /(columns / 1024));
+	//int blockRowsShape = (rows /(rows / 1024));
+
+	dim3 bloqShapeGpu(rows,columns);
+	dim3 gridShapeGpu(1,1);
+	
+	cudaMalloc(&rowsDevice, sizeof(int));
+	cudaMalloc(&columnsDevice, sizeof(int));
+
+	cudaMalloc(&numBlocksDevice, sizeof(int));
+
+
+	cudaMemcpy(rowsDevice,&rows, sizeof(int),cudaMemcpyHostToDevice);
+	cudaMemcpy(columnsDevice,&columns, sizeof(int),cudaMemcpyHostToDevice);
+
 
 	/* 3. Etiquetado inicial */
 	matrixResult= (int *)malloc( (rows)*(columns) * sizeof(int) );
 	matrixResultCopy= (int *)malloc( (rows)*(columns) * sizeof(int) );
+	cudaMalloc( (void**) &matrixResultDevice, sizeof(int) * (int)((rows)*(columns)));
+
 	if ( (matrixResult == NULL)  || (matrixResultCopy == NULL)  ) {
  		perror ("Error reservando memoria");
 	   	return -1;
@@ -207,13 +258,24 @@ int main (int argc, char* argv[])
 
 	}
 
+
 	/* 4.3 Inicio cuenta del numero de bloques */
 	numBlocks=0;
+
+	/*
 	for(i=1;i<rows-1;i++){
 		for(j=1;j<columns-1;j++){
 			if(matrixResult[i*columns+j] == i*columns+j) numBlocks++;
 		}
 	}
+	*/
+
+	cudaMemcpy(numBlocksDevice,&numBlocks, sizeof(int),cudaMemcpyHostToDevice);
+	cudaMemcpy(matrixResultDevice,matrixResult, sizeof(int) * (int)((rows)*(columns)),cudaMemcpyHostToDevice);
+
+	kernelCountFigures<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice, numBlocksDevice, rowsDevice, columnsDevice);
+
+	cudaMemcpy(&numBlocks,numBlocksDevice, sizeof(int),cudaMemcpyDeviceToHost);
 
 //
 // EL CODIGO A PARALELIZAR TERMINA AQUI
