@@ -25,6 +25,27 @@
 #define min(x,y)    ((x) < (y)? (x) : (y))
 
 
+__global__ void kernelFillMatrixResult(int *matrixResult, int *matrixData, int *rows, int *columns) {
+	/*
+	int index = threadIdx.x +
+				threadIdx.y * blockDim.x +
+        		blockIdx.x * blockDim.x * blockDim.y +
+        		blockIdx.y * blockDim.x * blockDim.y * gridDim.x;
+	*/
+
+ 	int i = blockIdx.x * blockDim.x + threadIdx.x;
+	int j = blockIdx.y * blockDim.y + threadIdx.y;
+
+	if(i > -1 && i<rows[0] &&
+		j > -1 && j<columns[0]){
+		// Si es 0 se trata del fondo y no lo computamos
+		if(matrixData[i*(columns[0])+j] !=0){
+			matrixResult[i*(columns[0])+j]=i*(columns[0])+j;
+		} else {
+			matrixResult[i*(columns[0])+j]=-1;
+		}
+	}
+}
 
 __global__ void kernelCountFigures(int *matrixResult, int *count, int *rows, int *columns) {
 	/*
@@ -102,11 +123,10 @@ int main (int argc, char* argv[])
 
 	int *rowsDevice;
 	int *columnsDevice;
-	int *matrixDataDevice=NULL;
+	int *matrixDataDevice;
 	int *matrixResultDevice;
 	int *matrixResultCopyDevice;
 	int *numBlocksDevice;
-	int *numBlocksArrayDevice;
 
 
 
@@ -193,34 +213,29 @@ int main (int argc, char* argv[])
 	cudaMalloc(&columnsDevice, sizeof(int));
 
 	cudaMalloc(&numBlocksDevice, sizeof(int));
-	cudaMalloc(&numBlocksArrayDevice, sizeof(int) * rowsGridShape * columnsGridShape);
 
+	cudaMalloc( (void**) &matrixDataDevice, sizeof(int) * (int)((rows)*(columns)));
 
 	cudaMemcpy(rowsDevice,&rows, sizeof(int),cudaMemcpyHostToDevice);
 	cudaMemcpy(columnsDevice,&columns, sizeof(int),cudaMemcpyHostToDevice);
+
+	cudaMemcpy(matrixDataDevice,matrixData, sizeof(int) * (int)((rows)*(columns)),cudaMemcpyHostToDevice);
 
 
 	/* 3. Etiquetado inicial */
 	matrixResult= (int *)malloc( (rows)*(columns) * sizeof(int) );
 	matrixResultCopy= (int *)malloc( (rows)*(columns) * sizeof(int) );
 	cudaMalloc( (void**) &matrixResultDevice, sizeof(int) * (int)((rows)*(columns)));
+	cudaMalloc( (void**) &matrixResultCopyDevice, sizeof(int) * (int)((rows)*(columns)));
 
 	if ( (matrixResult == NULL)  || (matrixResultCopy == NULL)  ) {
  		perror ("Error reservando memoria");
 	   	return -1;
 	}
-	for(i=0;i< rows; i++){
-		for(j=0;j< columns; j++){
-			matrixResultCopy[i*(columns)+j]=-1;
-			matrixResult[i*(columns)+j]=-1;
-			// Si es 0 se trata del fondo y no lo computamos
-			if(matrixData[i*(columns)+j]!=0){
-				matrixResult[i*(columns)+j]=i*(columns)+j;
-			}
-		}
-	}
 
+	kernelFillMatrixResult<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice, matrixDataDevice, rowsDevice, columnsDevice);
 
+	cudaMemcpy(matrixResult,matrixResultDevice, sizeof(int) * (int)((rows)*(columns)),cudaMemcpyDeviceToHost);
 
 	/* 4. Computacion */
 	int t=0;
@@ -258,21 +273,11 @@ int main (int argc, char* argv[])
 		#endif
 
 	}
+	cudaMemcpy(matrixResultDevice,matrixResult, sizeof(int) * (int)((rows)*(columns)),cudaMemcpyHostToDevice);
 
 
 	/* 4.3 Inicio cuenta del numero de bloques */
-	numBlocks=0;
-
-	/*
-	for(i=1;i<rows-1;i++){
-		for(j=1;j<columns-1;j++){
-			if(matrixResult[i*columns+j] == i*columns+j) numBlocks++;
-		}
-	}
-	*/
 	cudaMemset(numBlocksDevice,0,sizeof(int));
-
-	cudaMemcpy(matrixResultDevice,matrixResult, sizeof(int) * (int)((rows)*(columns)),cudaMemcpyHostToDevice);
 
 	kernelCountFigures<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice, numBlocksDevice, rowsDevice, columnsDevice);
 
@@ -311,7 +316,6 @@ int main (int argc, char* argv[])
 	cudaFree(rowsDevice);
 	cudaFree(columnsDevice);
 	cudaFree(numBlocksDevice);
-	cudaFree(numBlocksArrayDevice);
 	cudaFree(matrixResultDevice);
 	cudaFree(matrixResultCopyDevice);
 
