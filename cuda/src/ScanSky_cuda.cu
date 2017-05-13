@@ -21,18 +21,9 @@
 #include "cputils.h"
 
 
-/* Substituir min por el operador */
-#define min(x,y)    ((x) < (y)? (x) : (y))
-
 
 __global__ void kernelFillMatrixResult(int *matrixResult, int *matrixResultCopy,
 	int *matrixData, int *rows, int *columns) {
-	/*
-	int index = threadIdx.x +
-				threadIdx.y * blockDim.x +
-        		blockIdx.x * blockDim.x * blockDim.y +
-        		blockIdx.y * blockDim.x * blockDim.y * gridDim.x;
-	*/
 
  	int i = blockIdx.x * blockDim.x + threadIdx.x;
 	int j = blockIdx.y * blockDim.y + threadIdx.y;
@@ -52,12 +43,6 @@ __global__ void kernelFillMatrixResult(int *matrixResult, int *matrixResultCopy,
 
 __global__ void kernelComputationLoop(int *matrixResult,int *matrixResultCopy,
 	int *flagCambio, int *matrixData, int *rows, int *columns) {
-	/*
-	int index = threadIdx.x +
-				threadIdx.y * blockDim.x +
-				blockIdx.x * blockDim.x * blockDim.y +
-				blockIdx.y * blockDim.x * blockDim.y * gridDim.x;
-	*/
 
 
  	int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -98,12 +83,6 @@ __global__ void kernelComputationLoop(int *matrixResult,int *matrixResultCopy,
 
 __global__ void kernelCountFigures(int *matrixResult, int *count,
 	int *rows, int *columns) {
-	/*
-	int index = threadIdx.x +
-				threadIdx.y * blockDim.x +
-        		blockIdx.x * blockDim.x * blockDim.y +
-        		blockIdx.y * blockDim.x * blockDim.y * gridDim.x;
-	*/
 
  	int i = blockIdx.x * blockDim.x + threadIdx.x;
 	int j = blockIdx.y * blockDim.y + threadIdx.y;
@@ -136,6 +115,8 @@ int main (int argc, char* argv[])
 	int *matrixResult=NULL;
 	int *matrixResultCopy=NULL;
 	int numBlocks=-1;
+	int t=-1
+	char flagCambio=-1;
 
 	int *rowsDevice;
 	int *columnsDevice;
@@ -145,7 +126,6 @@ int main (int argc, char* argv[])
 	int *temp;
 	int *numBlocksDevice;
 	int *flagCambioDevice;
-
 
 	/* 2. Leer Fichero de entrada e inicializar datos */
 
@@ -217,99 +197,43 @@ int main (int argc, char* argv[])
 // EL CODIGO A PARALELIZAR COMIENZA AQUI
 //
 
-	int rowsBloqShape = 32;
-	int columnsBloqShape = 32;
+	int rowsBloqShape = 16;
+	int columnsBloqShape = 16;
 
-	int rowsGridShape = 128;
-	int columnsGridShape = 128;
+	int rowsGridShape = ceil((float) rows / rowsBloqShape);
+	int columnsGridShape = ceil((float) columns / columnsBloqShape);
 
 	dim3 bloqShapeGpu(rowsBloqShape,columnsBloqShape,1);
 	dim3 gridShapeGpu(rowsGridShape,columnsGridShape,1);
 
-	cudaMalloc(&rowsDevice, sizeof(int));
-	cudaMalloc(&columnsDevice, sizeof(int));
+	cudaMalloc(&rowsDevice, sizeof(rows));
+	cudaMalloc(&columnsDevice, sizeof(columns));
+	cudaMemcpy(rowsDevice,&rows, sizeof(rows),cudaMemcpyHostToDevice);
+	cudaMemcpy(columnsDevice,&columns, sizeof(columns),cudaMemcpyHostToDevice);
 
-	cudaMalloc(&numBlocksDevice, sizeof(int));
-	cudaMalloc(&flagCambioDevice, sizeof(int));
 
-	cudaMalloc( (void**) &matrixDataDevice, sizeof(int) * (int)((rows)*(columns)));
+	cudaMalloc(&numBlocksDevice, sizeof(numBlocks));
+	cudaMalloc(&flagCambioDevice, sizeof(flagCambio));
 
-	cudaMemcpy(rowsDevice,&rows, sizeof(int),cudaMemcpyHostToDevice);
-	cudaMemcpy(columnsDevice,&columns, sizeof(int),cudaMemcpyHostToDevice);
-
-	cudaMemcpy(matrixDataDevice,matrixData, sizeof(int) * (int)((rows)*(columns)),cudaMemcpyHostToDevice);
+	cudaMalloc( (void**) &matrixDataDevice, sizeof(int) * rows * columns);
+	cudaMemcpy(matrixDataDevice,matrixData, sizeof(int) * rows * columns,cudaMemcpyHostToDevice);
 
 
 	/* 3. Etiquetado inicial */
-	matrixResult= (int *)malloc( (rows)*(columns) * sizeof(int) );
-	matrixResultCopy= (int *)malloc( (rows)*(columns) * sizeof(int) );
-	cudaMalloc( (void**) &matrixResultDevice, sizeof(int) * (int)((rows)*(columns)));
-	cudaMalloc( (void**) &matrixResultCopyDevice, sizeof(int) * (int)((rows)*(columns)));
-
-	if ( (matrixResult == NULL)  || (matrixResultCopy == NULL)  ) {
- 		perror ("Error reservando memoria");
-	   	return -1;
-	}
+	cudaMalloc( (void**) &matrixResultDevice, sizeof(int) * sizeof(int) * rows * columns);
+	cudaMalloc( (void**) &matrixResultCopyDevice, sizeof(int) * sizeof(int) * rows * columns);
 
 	kernelFillMatrixResult<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice,
 		matrixResultCopyDevice, matrixDataDevice, rowsDevice, columnsDevice);
 
-	//cudaMemcpy(matrixResult,matrixResultDevice, sizeof(int) * (int)((rows)*(columns)),cudaMemcpyDeviceToHost);
-
 	/* 4. Computacion */
-	int t=0;
+	t=0;
 	/* 4.1 Flag para ver si ha habido cambios y si se continua la ejecucion */
-	int flagCambio=1;
+	flagCambio=1;
 
-	cudaMemcpy(flagCambioDevice,&flagCambio, sizeof(int),cudaMemcpyHostToDevice);
-
-	/*
-	kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice,
-		matrixResultCopyDevice, flagCambioDevice, matrixDataDevice,
-		rowsDevice, columnsDevice);
-	*/
 	for(t=0; flagCambio !=0; t++){
-		/*
-		flagCambio=0;
 
-		temp = matrixResult;
-		matrixResult = matrixResultCopy;
-		matrixResultCopy = temp;
-
-		for(i=1;i<rows-1;i++){
-			for(j=1;j<columns-1;j++){
-				if(matrixResult[i*columns+j] != -1){
-					matrixResult[i*columns+j] = matrixResultCopy[i*columns+j];
-					if((matrixData[(i-1)*columns+j] == matrixData[i*columns+j]) &&
-						(matrixResult[i*columns+j] > matrixResultCopy[(i-1)*columns+j]))
-					{
-						matrixResult[i*columns+j] = matrixResultCopy[(i-1)*columns+j];
-						flagCambio = 1;
-					}
-					if((matrixData[(i+1)*columns+j] == matrixData[i*columns+j]) &&
-						(matrixResult[i*columns+j] > matrixResultCopy[(i+1)*columns+j]))
-					{
-						matrixResult[i*columns+j] = matrixResultCopy[(i+1)*columns+j];
-						flagCambio = 1;
-					}
-					if((matrixData[i*columns+j-1] == matrixData[i*columns+j]) &&
-						(matrixResult[i*columns+j] > matrixResultCopy[i*columns+j-1]))
-					{
-						matrixResult[i*columns+j] = matrixResultCopy[i*columns+j-1];
-						flagCambio = 1;
-					}
-					if((matrixData[i*columns+j+1] == matrixData[i*columns+j]) &&
-						(matrixResult[i*columns+j] > matrixResultCopy[i*columns+j+1]))
-					{
-						matrixResult[i*columns+j] = matrixResultCopy[i*columns+j+1];
-						flagCambio = 1;
-					}
-				}
-			}
-		}
-		*/
-
-		cudaMemset(flagCambioDevice,0,sizeof(int));
+		cudaMemset(flagCambioDevice,0,sizeof(flagCambio));
 
 		temp = matrixResultDevice;
 		matrixResultDevice = matrixResultCopyDevice;
@@ -319,28 +243,15 @@ int main (int argc, char* argv[])
 			matrixResultCopyDevice, flagCambioDevice, matrixDataDevice,
 			rowsDevice, columnsDevice);
 
-
-		cudaMemcpy(&flagCambio,flagCambioDevice, sizeof(int),cudaMemcpyDeviceToHost);
-
-		#ifdef DEBUG
-			printf("\nResultados iter %d: \n", t);
-			for(i=0;i<rows;i++){
-				for(j=0;j<columns;j++){
-					printf ("%d\t", matrixResult[i*columns+j]);
-				}
-				printf("\n");
-			}
-		#endif
-
+		cudaMemcpy(&flagCambio,flagCambioDevice, sizeof(flagCambio),cudaMemcpyDeviceToHost);
 	}
-
-	//cudaMemcpy(matrixResultDevice,matrixResult, sizeof(int) * (int)((rows)*(columns)),cudaMemcpyHostToDevice);
 
 
 	/* 4.3 Inicio cuenta del numero de bloques */
 	cudaMemset(numBlocksDevice,0,sizeof(int));
 
-	kernelCountFigures<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice, numBlocksDevice, rowsDevice, columnsDevice);
+	kernelCountFigures<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice,
+		numBlocksDevice, rowsDevice, columnsDevice);
 
 	cudaMemcpy(&numBlocks,numBlocksDevice, sizeof(int),cudaMemcpyDeviceToHost);
 
@@ -377,6 +288,8 @@ int main (int argc, char* argv[])
 	cudaFree(rowsDevice);
 	cudaFree(columnsDevice);
 	cudaFree(numBlocksDevice);
+	cudaFree(flagCambioDevice);
+	cudaFree(matrixDataDevice);
 	cudaFree(matrixResultDevice);
 	cudaFree(matrixResultCopyDevice);
 
