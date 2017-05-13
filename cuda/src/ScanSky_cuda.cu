@@ -25,7 +25,8 @@
 #define min(x,y)    ((x) < (y)? (x) : (y))
 
 
-__global__ void kernelFillMatrixResult(int *matrixResult, int *matrixData, int *rows, int *columns) {
+__global__ void kernelFillMatrixResult(int *matrixResult, int *matrixResultCopy,
+	int *matrixData, int *rows, int *columns) {
 	/*
 	int index = threadIdx.x +
 				threadIdx.y * blockDim.x +
@@ -41,13 +42,62 @@ __global__ void kernelFillMatrixResult(int *matrixResult, int *matrixData, int *
 		// Si es 0 se trata del fondo y no lo computamos
 		if(matrixData[i*(columns[0])+j] !=0){
 			matrixResult[i*(columns[0])+j]=i*(columns[0])+j;
+			matrixResultCopy[i*(columns[0])+j]=i*(columns[0])+j;
 		} else {
 			matrixResult[i*(columns[0])+j]=-1;
+			matrixResultCopy[i*(columns[0])+j]=-1;
 		}
 	}
 }
 
-__global__ void kernelCountFigures(int *matrixResult, int *count, int *rows, int *columns) {
+__global__ void kernelComputationLoop(int *matrixResult,int *matrixResultCopy,
+	int *flagCambio, int *matrixData, int *rows, int *columns) {
+	/*
+	int index = threadIdx.x +
+				threadIdx.y * blockDim.x +
+				blockIdx.x * blockDim.x * blockDim.y +
+				blockIdx.y * blockDim.x * blockDim.y * gridDim.x;
+	*/
+
+
+ 	int i = blockIdx.x * blockDim.x + threadIdx.x;
+	int j = blockIdx.y * blockDim.y + threadIdx.y;
+
+	/* 4.2.2 Computo y detecto si ha habido cambios */
+	if(i > 0 && i<rows[0]-1 &&
+		j > 0 && j<columns[0]-1){
+		if(matrixResult[i*columns[0]+j] != -1){
+			matrixResult[i*columns[0]+j] = matrixResultCopy[i*columns[0]+j];
+			if((matrixData[(i-1)*columns[0]+j] == matrixData[i*columns[0]+j]) &&
+				(matrixResult[i*columns[0]+j] > matrixResultCopy[(i-1)*columns[0]+j]))
+			{
+				matrixResult[i*columns[0]+j] = matrixResultCopy[(i-1)*columns[0]+j];
+				atomicOr(&flagCambio[0], (int)1);
+			}
+			if((matrixData[(i+1)*columns[0]+j] == matrixData[i*columns[0]+j]) &&
+				(matrixResult[i*columns[0]+j] > matrixResultCopy[(i+1)*columns[0]+j]))
+			{
+				matrixResult[i*columns[0]+j] = matrixResultCopy[(i+1)*columns[0]+j];
+				atomicOr(&flagCambio[0], (int)1);
+			}
+			if((matrixData[i*columns[0]+j-1] == matrixData[i*columns[0]+j]) &&
+				(matrixResult[i*columns[0]+j] > matrixResultCopy[i*columns[0]+j-1]))
+			{
+				matrixResult[i*columns[0]+j] = matrixResultCopy[i*columns[0]+j-1];
+				atomicOr(&flagCambio[0], (int)1);
+			}
+			if((matrixData[i*columns[0]+j+1] == matrixData[i*columns[0]+j]) &&
+				(matrixResult[i*columns[0]+j] > matrixResultCopy[i*columns[0]+j+1]))
+			{
+				matrixResult[i*columns[0]+j] = matrixResultCopy[i*columns[0]+j+1];
+				atomicOr(&flagCambio[0], (int)1);
+			}
+		}
+	}
+}
+
+__global__ void kernelCountFigures(int *matrixResult, int *count,
+	int *rows, int *columns) {
 	/*
 	int index = threadIdx.x +
 				threadIdx.y * blockDim.x +
@@ -65,40 +115,6 @@ __global__ void kernelCountFigures(int *matrixResult, int *count, int *rows, int
 			atomicAdd(&count[0],(int) 1);
 		}
 	}
-}
-
-/**
-* Funcion secuencial para la busqueda de mi bloque
-*/
-int computation(int x, int y, int columns, int* matrixData, int *matrixResult, int *matrixResultCopy){
-	// Inicialmente cojo mi indice
-	int result=matrixResultCopy[x*columns+y];
-	if( result!= -1){
-		//Si es de mi mismo grupo, entonces actualizo
-		if(matrixData[(x-1)*columns+y] == matrixData[x*columns+y])
-		{
-			result = min (result, matrixResultCopy[(x-1)*columns+y]);
-		}
-		if(matrixData[(x+1)*columns+y] == matrixData[x*columns+y])
-		{
-			result = min (result, matrixResultCopy[(x+1)*columns+y]);
-		}
-		if(matrixData[x*columns+y-1] == matrixData[x*columns+y])
-		{
-			result = min (result, matrixResultCopy[x*columns+y-1]);
-		}
-		if(matrixData[x*columns+y+1] == matrixData[x*columns+y])
-		{
-			result = min (result, matrixResultCopy[x*columns+y+1]);
-		}
-
-		// Si el indice no ha cambiado retorna 0
-		if(matrixResult[x*columns+y] == result){ return 0; }
-		// Si el indice cambia, actualizo matrix de resultados con el indice adecuado y retorno 1
-		else { matrixResult[x*columns+y]=result; return 1;}
-
-	}
-	return 0;
 }
 
 /**
@@ -126,8 +142,9 @@ int main (int argc, char* argv[])
 	int *matrixDataDevice;
 	int *matrixResultDevice;
 	int *matrixResultCopyDevice;
+	int *temp;
 	int *numBlocksDevice;
-
+	int *flagCambioDevice;
 
 
 	/* 2. Leer Fichero de entrada e inicializar datos */
@@ -213,6 +230,7 @@ int main (int argc, char* argv[])
 	cudaMalloc(&columnsDevice, sizeof(int));
 
 	cudaMalloc(&numBlocksDevice, sizeof(int));
+	cudaMalloc(&flagCambioDevice, sizeof(int));
 
 	cudaMalloc( (void**) &matrixDataDevice, sizeof(int) * (int)((rows)*(columns)));
 
@@ -233,34 +251,76 @@ int main (int argc, char* argv[])
 	   	return -1;
 	}
 
-	kernelFillMatrixResult<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice, matrixDataDevice, rowsDevice, columnsDevice);
+	kernelFillMatrixResult<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice,
+		matrixResultCopyDevice, matrixDataDevice, rowsDevice, columnsDevice);
 
-	cudaMemcpy(matrixResult,matrixResultDevice, sizeof(int) * (int)((rows)*(columns)),cudaMemcpyDeviceToHost);
+	//cudaMemcpy(matrixResult,matrixResultDevice, sizeof(int) * (int)((rows)*(columns)),cudaMemcpyDeviceToHost);
 
 	/* 4. Computacion */
 	int t=0;
 	/* 4.1 Flag para ver si ha habido cambios y si se continua la ejecucion */
 	int flagCambio=1;
 
-	/* 4.2 Busqueda de los bloques similiares */
+	cudaMemcpy(flagCambioDevice,&flagCambio, sizeof(int),cudaMemcpyHostToDevice);
+
+	/*
+	kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice,
+		matrixResultCopyDevice, flagCambioDevice, matrixDataDevice,
+		rowsDevice, columnsDevice);
+	*/
 	for(t=0; flagCambio !=0; t++){
+		/*
 		flagCambio=0;
 
-		/* 4.2.1 Actualizacion copia */
+		temp = matrixResult;
+		matrixResult = matrixResultCopy;
+		matrixResultCopy = temp;
+
 		for(i=1;i<rows-1;i++){
 			for(j=1;j<columns-1;j++){
-				if(matrixResult[i*(columns)+j]!=-1){
-					matrixResultCopy[i*(columns)+j]=matrixResult[i*(columns)+j];
+				if(matrixResult[i*columns+j] != -1){
+					matrixResult[i*columns+j] = matrixResultCopy[i*columns+j];
+					if((matrixData[(i-1)*columns+j] == matrixData[i*columns+j]) &&
+						(matrixResult[i*columns+j] > matrixResultCopy[(i-1)*columns+j]))
+					{
+						matrixResult[i*columns+j] = matrixResultCopy[(i-1)*columns+j];
+						flagCambio = 1;
+					}
+					if((matrixData[(i+1)*columns+j] == matrixData[i*columns+j]) &&
+						(matrixResult[i*columns+j] > matrixResultCopy[(i+1)*columns+j]))
+					{
+						matrixResult[i*columns+j] = matrixResultCopy[(i+1)*columns+j];
+						flagCambio = 1;
+					}
+					if((matrixData[i*columns+j-1] == matrixData[i*columns+j]) &&
+						(matrixResult[i*columns+j] > matrixResultCopy[i*columns+j-1]))
+					{
+						matrixResult[i*columns+j] = matrixResultCopy[i*columns+j-1];
+						flagCambio = 1;
+					}
+					if((matrixData[i*columns+j+1] == matrixData[i*columns+j]) &&
+						(matrixResult[i*columns+j] > matrixResultCopy[i*columns+j+1]))
+					{
+						matrixResult[i*columns+j] = matrixResultCopy[i*columns+j+1];
+						flagCambio = 1;
+					}
 				}
 			}
 		}
+		*/
 
-		/* 4.2.2 Computo y detecto si ha habido cambios */
-		for(i=1;i<rows-1;i++){
-			for(j=1;j<columns-1;j++){
-				flagCambio= flagCambio+ computation(i,j,columns, matrixData, matrixResult, matrixResultCopy);
-			}
-		}
+		cudaMemset(flagCambioDevice,0,sizeof(int));
+
+		temp = matrixResultDevice;
+		matrixResultDevice = matrixResultCopyDevice;
+		matrixResultCopyDevice = temp;
+
+		kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice,
+			matrixResultCopyDevice, flagCambioDevice, matrixDataDevice,
+			rowsDevice, columnsDevice);
+
+
+		cudaMemcpy(&flagCambio,flagCambioDevice, sizeof(int),cudaMemcpyDeviceToHost);
 
 		#ifdef DEBUG
 			printf("\nResultados iter %d: \n", t);
@@ -273,7 +333,8 @@ int main (int argc, char* argv[])
 		#endif
 
 	}
-	cudaMemcpy(matrixResultDevice,matrixResult, sizeof(int) * (int)((rows)*(columns)),cudaMemcpyHostToDevice);
+
+	//cudaMemcpy(matrixResultDevice,matrixResult, sizeof(int) * (int)((rows)*(columns)),cudaMemcpyHostToDevice);
 
 
 	/* 4.3 Inicio cuenta del numero de bloques */
