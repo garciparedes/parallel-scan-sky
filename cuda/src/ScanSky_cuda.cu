@@ -25,8 +25,8 @@
 __global__ void kernelFillMatrixResult(int *matrixResult, int *matrixResultCopy,
 	int *matrixData, int *rows, int *columns) {
 
- 	int i = blockIdx.x * blockDim.x + threadIdx.x;
-	int j = blockIdx.y * blockDim.y + threadIdx.y;
+ 	int j = blockIdx.x * blockDim.x + threadIdx.x;
+	int i = blockIdx.y * blockDim.y + threadIdx.y;
 
 	if(i > -1 && i<rows[0] &&
 		j > -1 && j<columns[0]){
@@ -45,8 +45,8 @@ __global__ void kernelComputationLoop(int *matrixResult,int *matrixResultCopy,
 	int *flagCambio, int *matrixData, int *rows, int *columns) {
 
 
- 	int i = blockIdx.x * blockDim.x + threadIdx.x;
-	int j = blockIdx.y * blockDim.y + threadIdx.y;
+ 	int j = blockIdx.x * blockDim.x + threadIdx.x;
+	int i = blockIdx.y * blockDim.y + threadIdx.y;
 
 	/* 4.2.2 Computo y detecto si ha habido cambios */
 	if(i > 0 && i<rows[0]-1 &&
@@ -84,8 +84,8 @@ __global__ void kernelComputationLoop(int *matrixResult,int *matrixResultCopy,
 __global__ void kernelCountFigures(int *matrixResult, int *count,
 	int *rows, int *columns) {
 
- 	int i = blockIdx.x * blockDim.x + threadIdx.x;
-	int j = blockIdx.y * blockDim.y + threadIdx.y;
+ 	int j = blockIdx.x * blockDim.x + threadIdx.x;
+	int i = blockIdx.y * blockDim.y + threadIdx.y;
 
 	if(i > 0 && i<rows[0]-1 &&
 		j > 0 && j<columns[0]-1){
@@ -203,8 +203,8 @@ int main (int argc, char* argv[])
 	int rowsGridShape = ceil((float) rows / rowsBloqShape);
 	int columnsGridShape = ceil((float) columns / columnsBloqShape);
 
-	dim3 bloqShapeGpu(rowsBloqShape,columnsBloqShape,1);
-	dim3 gridShapeGpu(rowsGridShape,columnsGridShape,1);
+	dim3 bloqShapeGpu(columnsBloqShape,rowsBloqShape,1);
+	dim3 gridShapeGpu(columnsGridShape,rowsGridShape,1);
 
 	cudaMalloc(&rowsDevice, sizeof(rows));
 	cudaMalloc(&columnsDevice, sizeof(columns));
