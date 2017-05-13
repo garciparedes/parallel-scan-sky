@@ -115,7 +115,7 @@ int main (int argc, char* argv[])
 	int *matrixResult=NULL;
 	int *matrixResultCopy=NULL;
 	int numBlocks=-1;
-	int t=-1
+	int t=-1;
 	char flagCambio=-1;
 
 	int *rowsDevice;
