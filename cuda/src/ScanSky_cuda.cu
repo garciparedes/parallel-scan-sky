@@ -20,18 +20,22 @@
 #include <cuda.h>
 #include "cputils.h"
 
+
+#define rowsBloqShape 8
+#define columnsBloqShape 16
+
 __device__ __constant__ int rowsDevice[1];
 __device__ __constant__ int columnsDevice[1];
+__device__ __constant__ int* matrixDataPointer;
 
-__global__ void kernelFillMatrixResult(int *matrixResult, int *matrixResultCopy,
-	int *matrixData) {
+__global__ void kernelFillMatrixResult(int *matrixResult, int *matrixResultCopy) {
 
 	const int i = blockIdx.y * blockDim.y + threadIdx.y;
 	const int j = blockIdx.x * blockDim.x + threadIdx.x;
 
 	if(i > -1 && i<rowsDevice[0] &&
 		j > -1 && j<columnsDevice[0]){
-		if(matrixData[i*(columnsDevice[0])+j] !=0){
+		if(matrixDataPointer[i*(columnsDevice[0])+j] !=0){
 			matrixResult[i*(columnsDevice[0])+j]=i*(columnsDevice[0])+j;
 			matrixResultCopy[i*(columnsDevice[0])+j]=i*(columnsDevice[0])+j;
 		} else {
@@ -42,7 +46,7 @@ __global__ void kernelFillMatrixResult(int *matrixResult, int *matrixResultCopy,
 }
 
 __global__ void kernelComputationLoop(int *matrixResult,int *matrixResultCopy,
-	int *flagCambio, int *matrixData) {
+	char *flagCambio) {
 
 	const int i = blockIdx.y * blockDim.y + threadIdx.y;
 	const int j = blockIdx.x * blockDim.x + threadIdx.x;
@@ -54,29 +58,29 @@ __global__ void kernelComputationLoop(int *matrixResult,int *matrixResultCopy,
 		if(matrixResult[i*columnsDevice[0]+j] != -1){
 
 			matrixResult[i*columnsDevice[0]+j] = matrixResultCopy[i*columnsDevice[0]+j];
-			if((matrixData[(i-1)*columnsDevice[0]+j] == matrixData[i*columnsDevice[0]+j]) &&
+			if((matrixDataPointer[(i-1)*columnsDevice[0]+j] == matrixDataPointer[i*columnsDevice[0]+j]) &&
 				(matrixResult[i*columnsDevice[0]+j] > matrixResultCopy[(i-1)*columnsDevice[0]+j]))
 			{
 				matrixResult[i*columnsDevice[0]+j] = matrixResultCopy[(i-1)*columnsDevice[0]+j];
-				atomicOr(&flagCambio[0], (int)1);
+				flagCambio[0] = 1;
 			}
-			if((matrixData[(i+1)*columnsDevice[0]+j] == matrixData[i*columnsDevice[0]+j]) &&
+			if((matrixDataPointer[(i+1)*columnsDevice[0]+j] == matrixDataPointer[i*columnsDevice[0]+j]) &&
 				(matrixResult[i*columnsDevice[0]+j] > matrixResultCopy[(i+1)*columnsDevice[0]+j]))
 			{
 				matrixResult[i*columnsDevice[0]+j] = matrixResultCopy[(i+1)*columnsDevice[0]+j];
-				atomicOr(&flagCambio[0], (int)1);
+				flagCambio[0] = 1;
 			}
-			if((matrixData[i*columnsDevice[0]+j-1] == matrixData[i*columnsDevice[0]+j]) &&
+			if((matrixDataPointer[i*columnsDevice[0]+j-1] == matrixDataPointer[i*columnsDevice[0]+j]) &&
 				(matrixResult[i*columnsDevice[0]+j] > matrixResultCopy[i*columnsDevice[0]+j-1]))
 			{
 				matrixResult[i*columnsDevice[0]+j] = matrixResultCopy[i*columnsDevice[0]+j-1];
-				atomicOr(&flagCambio[0], (int)1);
+				flagCambio[0] = 1;
 			}
-			if((matrixData[i*columnsDevice[0]+j+1] == matrixData[i*columnsDevice[0]+j]) &&
+			if((matrixDataPointer[i*columnsDevice[0]+j+1] == matrixDataPointer[i*columnsDevice[0]+j]) &&
 				(matrixResult[i*columnsDevice[0]+j] > matrixResultCopy[i*columnsDevice[0]+j+1]))
 			{
 				matrixResult[i*columnsDevice[0]+j] = matrixResultCopy[i*columnsDevice[0]+j+1];
-				atomicOr(&flagCambio[0], (int)1);
+				flagCambio[0] = 1;
 			}
 		}
 	}
@@ -121,7 +125,7 @@ int main (int argc, char* argv[])
 	int *matrixResultCopyDevice;
 	int *temp;
 	int *numBlocksDevice;
-	int *flagCambioDevice;
+	char *flagCambioDevice;
 
 	/* 2. Leer Fichero de entrada e inicializar datos */
 
@@ -193,23 +197,23 @@ int main (int argc, char* argv[])
 // EL CODIGO A PARALELIZAR COMIENZA AQUI
 //
 
-	int rowsBloqShape = 16;
-	int columnsBloqShape = 16;
-	int rowsGridShape = ceil((float) rows / rowsBloqShape);
-	int columnsGridShape = ceil((float) columns / columnsBloqShape);
 
-	const dim3 bloqShapeGpu(columnsBloqShape,rowsBloqShape,1);
-	const dim3 gridShapeGpu(columnsGridShape,rowsGridShape,1);
+	const dim3 bloqShapeGpu(columnsBloqShape,rowsBloqShape);
+	const dim3 gridShapeGpu(
+		ceil((float) columns / columnsBloqShape),
+		ceil((float) rows / rowsBloqShape)
+	);
 
-	cudaMemcpyToSymbol(rowsDevice,&rows, sizeof(int),0,cudaMemcpyHostToDevice);
-	cudaMemcpyToSymbol(columnsDevice,&columns, sizeof(int),0,cudaMemcpyHostToDevice);
+	cudaMemcpyToSymbolAsync(rowsDevice,&rows, sizeof(int),0,cudaMemcpyHostToDevice);
+	cudaMemcpyToSymbolAsync(columnsDevice,&columns, sizeof(int),0,cudaMemcpyHostToDevice);
 
 
-	cudaMalloc(&numBlocksDevice, sizeof(numBlocks));
-	cudaMalloc(&flagCambioDevice, sizeof(flagCambio));
+	cudaMalloc(&numBlocksDevice, sizeof(int));
+	cudaMalloc(&flagCambioDevice, sizeof(int));
 
 	cudaMalloc( (void**) &matrixDataDevice, sizeof(int) * rows * columns);
-	cudaMemcpy(matrixDataDevice,matrixData, sizeof(int) * rows * columns,cudaMemcpyHostToDevice);
+	cudaMemcpyAsync(matrixDataDevice,matrixData, sizeof(int) * rows * columns,cudaMemcpyHostToDevice);
+	cudaMemcpyToSymbolAsync(matrixDataPointer,&matrixDataDevice, sizeof(int *));
 
 
 	/* 3. Etiquetado inicial */
@@ -217,7 +221,7 @@ int main (int argc, char* argv[])
 	cudaMalloc( (void**) &matrixResultCopyDevice, sizeof(int) * sizeof(int) * rows * columns);
 
 	kernelFillMatrixResult<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice,
-		matrixResultCopyDevice, matrixDataDevice);
+		matrixResultCopyDevice);
 
 	/* 4. Computacion */
 	t=0;
@@ -226,26 +230,26 @@ int main (int argc, char* argv[])
 
 	for(t=0; flagCambio !=0; t++){
 
-		cudaMemset(flagCambioDevice,0,sizeof(flagCambio));
+		cudaMemsetAsync(flagCambioDevice,0,sizeof(char));
 
 		temp = matrixResultDevice;
 		matrixResultDevice = matrixResultCopyDevice;
 		matrixResultCopyDevice = temp;
 
 		kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice,
-			matrixResultCopyDevice, flagCambioDevice, matrixDataDevice);
+			matrixResultCopyDevice, flagCambioDevice);
 
-		cudaMemcpy(&flagCambio,flagCambioDevice, sizeof(flagCambio),cudaMemcpyDeviceToHost);
+		cudaMemcpy(&flagCambio,flagCambioDevice, sizeof(char),cudaMemcpyDeviceToHost);
 	}
 
 
 	/* 4.3 Inicio cuenta del numero de bloques */
-	cudaMemset(numBlocksDevice,0,sizeof(int));
+	cudaMemsetAsync(numBlocksDevice,0,sizeof(int));
 
 	kernelCountFigures<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice,
 		numBlocksDevice);
 
-	cudaMemcpy(&numBlocks,numBlocksDevice, sizeof(int),cudaMemcpyDeviceToHost);
+	cudaMemcpyAsync(&numBlocks,numBlocksDevice, sizeof(int),cudaMemcpyDeviceToHost);
 
 //
 // EL CODIGO A PARALELIZAR TERMINA AQUI
@@ -281,6 +285,7 @@ int main (int argc, char* argv[])
 	cudaFree(columnsDevice);
 	cudaFree(numBlocksDevice);
 	cudaFree(flagCambioDevice);
+	cudaFree(matrixDataPointer);
 	cudaFree(matrixDataDevice);
 	cudaFree(matrixResultDevice);
 	cudaFree(matrixResultCopyDevice);
