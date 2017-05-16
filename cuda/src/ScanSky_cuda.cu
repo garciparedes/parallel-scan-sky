@@ -114,7 +114,6 @@ int main (int argc, char* argv[])
 	int rows=-1;
 	int columns =-1;
 	int *matrixData=NULL;
-	char *matrixDataChar=NULL;
 	int *matrixResult=NULL;
 	int *matrixResultCopy=NULL;
 	int numBlocks=-1;
@@ -198,6 +197,11 @@ int main (int argc, char* argv[])
 // EL CODIGO A PARALELIZAR COMIENZA AQUI
 //
 
+	cudaMalloc(&numBlocksDevice, sizeof(int));
+	cudaMalloc(&flagCambioDevice, sizeof(int));
+	cudaMalloc( (void**) &matrixDataDevice, sizeof(char) * rows * columns);
+	cudaMalloc( (void**) &matrixResultDevice, sizeof(int) * sizeof(int) * rows * columns);
+	cudaMalloc( (void**) &matrixResultCopyDevice, sizeof(int) * sizeof(int) * rows * columns);
 
 	const dim3 bloqShapeGpu(columnsBloqShape,rowsBloqShape);
 	const dim3 gridShapeGpu(
@@ -205,28 +209,22 @@ int main (int argc, char* argv[])
 		ceil((float) rows / rowsBloqShape)
 	);
 
+	cudaMemcpy2DAsync(
+		matrixDataDevice,
+		sizeof(char),
+		matrixData,
+		sizeof(int),
+		1,
+		rows*columns,
+		cudaMemcpyHostToDevice
+	);
+	cudaMemcpyToSymbolAsync(matrixDataPointer,&matrixDataDevice, sizeof(char *));
 	cudaMemcpyToSymbolAsync(rowsDevice,&rows, sizeof(int),0,cudaMemcpyHostToDevice);
 	cudaMemcpyToSymbolAsync(columnsDevice,&columns, sizeof(int),0,cudaMemcpyHostToDevice);
 
 
-	cudaMalloc(&numBlocksDevice, sizeof(int));
-	cudaMalloc(&flagCambioDevice, sizeof(int));
-
-	matrixDataChar = (char *)malloc(rows*(columns) * sizeof(char) );
-	for(i = 0; i < rows * columns; i++){
-		matrixDataChar[i] = matrixData[i];
-	}
-
-	cudaMalloc( (void**) &matrixDataDevice, sizeof(char) * rows * columns);
-
-
-	cudaMemcpyAsync(matrixDataDevice,matrixDataChar, sizeof(char) * rows * columns,cudaMemcpyHostToDevice);
-	cudaMemcpyToSymbolAsync(matrixDataPointer,&matrixDataDevice, sizeof(char *));
-
 
 	/* 3. Etiquetado inicial */
-	cudaMalloc( (void**) &matrixResultDevice, sizeof(int) * sizeof(int) * rows * columns);
-	cudaMalloc( (void**) &matrixResultCopyDevice, sizeof(int) * sizeof(int) * rows * columns);
 
 	kernelFillMatrixResult<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice,
 		matrixResultCopyDevice);
