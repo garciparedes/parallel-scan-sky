@@ -26,7 +26,7 @@
 
 __device__ __constant__ int rowsDevice[1];
 __device__ __constant__ int columnsDevice[1];
-__device__ __constant__ int* matrixDataPointer;
+__device__ __constant__ char* matrixDataPointer;
 
 __global__ void kernelFillMatrixResult(int *matrixResult, int *matrixResultCopy) {
 
@@ -114,13 +114,14 @@ int main (int argc, char* argv[])
 	int rows=-1;
 	int columns =-1;
 	int *matrixData=NULL;
+	char *matrixDataChar=NULL;
 	int *matrixResult=NULL;
 	int *matrixResultCopy=NULL;
 	int numBlocks=-1;
 	int t=-1;
 	char flagCambio=-1;
 
-	int *matrixDataDevice;
+	char *matrixDataDevice;
 	int *matrixResultDevice;
 	int *matrixResultCopyDevice;
 	int *temp;
@@ -211,9 +212,16 @@ int main (int argc, char* argv[])
 	cudaMalloc(&numBlocksDevice, sizeof(int));
 	cudaMalloc(&flagCambioDevice, sizeof(int));
 
-	cudaMalloc( (void**) &matrixDataDevice, sizeof(int) * rows * columns);
-	cudaMemcpyAsync(matrixDataDevice,matrixData, sizeof(int) * rows * columns,cudaMemcpyHostToDevice);
-	cudaMemcpyToSymbolAsync(matrixDataPointer,&matrixDataDevice, sizeof(int *));
+	matrixDataChar = (char *)malloc(rows*(columns) * sizeof(char) );
+	for(i = 0; i < rows * columns; i++){
+		matrixDataChar[i] = matrixData[i];
+	}
+
+	cudaMalloc( (void**) &matrixDataDevice, sizeof(char) * rows * columns);
+
+
+	cudaMemcpyAsync(matrixDataDevice,matrixDataChar, sizeof(char) * rows * columns,cudaMemcpyHostToDevice);
+	cudaMemcpyToSymbolAsync(matrixDataPointer,&matrixDataDevice, sizeof(char *));
 
 
 	/* 3. Etiquetado inicial */
