@@ -86,6 +86,36 @@ __global__ void kernelComputationLoop(int *matrixResult,int *matrixResultCopy,
 	}
 }
 
+__global__ void kernelF(int *matrixResult,int *matrixResultCopy,
+	int *t, char *flagCambio) {
+
+	__syncthreads();
+	if(blockIdx.y * blockDim.y + threadIdx.y == 0 &&
+		blockIdx.x * blockDim.x + threadIdx.x == 0){
+		int *temp;
+		const dim3 bloqShapeGpu(columnsBloqShape,rowsBloqShape);
+		const dim3 gridShapeGpu(
+			ceil((float) columnsDevice[0] / columnsBloqShape),
+			ceil((float) rowsDevice[0] / rowsBloqShape)
+		);
+
+		flagCambio[0] = 1;
+
+		for(t[0]=0; flagCambio[0] != 0; t[0]++){
+			flagCambio[0] = 0;
+
+			temp = matrixResult;
+			matrixResult = matrixResultCopy;
+			matrixResultCopy = temp;
+
+			kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu>>>(matrixResult,
+				matrixResultCopy, flagCambio);
+			cudaDeviceSynchronize();
+		}
+	}
+	__syncthreads();
+}
+
 __global__ void kernelCountFigures(int *matrixResult, int *count) {
 
 	const int i = blockIdx.y * blockDim.y + threadIdx.y;
@@ -125,6 +155,7 @@ int main (int argc, char* argv[])
 	int *matrixResultCopyDevice;
 	int *temp;
 	int *numBlocksDevice;
+	int *tDevice;
 	char *flagCambioDevice;
 
 	/* 2. Leer Fichero de entrada e inicializar datos */
@@ -224,24 +255,15 @@ int main (int argc, char* argv[])
 		matrixResultCopyDevice);
 
 	/* 4. Computacion */
-	t=0;
+	
 	/* 4.1 Flag para ver si ha habido cambios y si se continua la ejecucion */
-	flagCambio=1;
+	cudaMalloc(&tDevice, sizeof(int));
+	cudaMemsetAsync(tDevice,0,sizeof(char));
 
-	for(t=0; flagCambio !=0; t++){
+	kernelF<<<1,1>>>(matrixResultDevice,
+		matrixResultCopyDevice,tDevice, flagCambioDevice);
 
-		cudaMemsetAsync(flagCambioDevice,0,sizeof(char));
-
-		temp = matrixResultDevice;
-		matrixResultDevice = matrixResultCopyDevice;
-		matrixResultCopyDevice = temp;
-
-		kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice,
-			matrixResultCopyDevice, flagCambioDevice);
-
-		cudaMemcpy(&flagCambio,flagCambioDevice, sizeof(char),cudaMemcpyDeviceToHost);
-	}
-
+	cudaMemcpy(&t,tDevice, sizeof(int),cudaMemcpyDeviceToHost);
 
 	/* 4.3 Inicio cuenta del numero de bloques */
 	cudaMemsetAsync(numBlocksDevice,0,sizeof(int));
