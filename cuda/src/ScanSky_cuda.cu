@@ -204,10 +204,11 @@ int main (int argc, char* argv[])
 		ceil((float) rows / rowsBloqShape)
 	);
 
+	size_t pitch;
 
-	cudaMalloc( (void**) &matrixResultDevice, sizeof(int) * sizeof(int) * rows * columns);
-	cudaMalloc( (void**) &matrixResultCopyDevice, sizeof(int) * sizeof(int) * rows * columns);
-	cudaMalloc( (void**) &matrixDataDevice, sizeof(char) * rows * columns);
+	cudaMallocPitch((void**)&matrixResultDevice, &pitch, rows*sizeof(int), columns);
+	cudaMallocPitch((void**)&matrixResultCopyDevice, &pitch, rows*sizeof(int), columns);
+	cudaMallocPitch((void**)&matrixDataDevice, &pitch, rows*sizeof(char), columns);
 
 	cudaMemcpyToSymbolAsync(rowsDevice,&rows, sizeof(int),0,cudaMemcpyHostToDevice);
 	cudaMemcpyToSymbolAsync(columnsDevice,&columns, sizeof(int),0,cudaMemcpyHostToDevice);
@@ -217,7 +218,14 @@ int main (int argc, char* argv[])
 	for(i = 0; i < rows * columns; i++){
 		matrixDataChar[i] = matrixData[i];
 	}
-
+	/*
+	cudaMemcpy2DAsync(matrixDataDevice,
+		rows*sizeof(char) +	pitch,
+		matrixDataChar,
+		rows*sizeof(char),
+    	1,
+		columns, cudaMemcpyHostToDevice);
+	*/
 	cudaMemcpyAsync(matrixDataDevice,matrixDataChar, sizeof(char) * rows * columns,cudaMemcpyHostToDevice);
 
 
