@@ -139,7 +139,6 @@ int main (int argc, char* argv[])
 	char *matrixDataDevice;
 	int *matrixResultDevice;
 	int *matrixResultCopyDevice;
-	int *temp;
 
 	/* 2. Leer Fichero de entrada e inicializar datos */
 
@@ -210,7 +209,9 @@ int main (int argc, char* argv[])
 //
 // EL CODIGO A PARALELIZAR COMIENZA AQUI
 //
-
+    cudaStream_t stream[2];
+    gpuErrorCheck( cudaStreamCreate(&stream[0]) );
+    gpuErrorCheck( cudaStreamCreate(&stream[1]) );
 
 	const dim3 bloqShapeGpu(columnsBloqShape,rowsBloqShape);
 	const dim3 gridShapeGpu(
@@ -245,7 +246,8 @@ int main (int argc, char* argv[])
 		cudaMemcpyHostToDevice
 	));
 	*/
-	gpuErrorCheck(cudaMemcpyAsync(matrixDataDevice,matrixDataChar, sizeof(char) * rows * columns,cudaMemcpyHostToDevice));
+	gpuErrorCheck(cudaMemcpyAsync(matrixDataDevice,matrixDataChar,
+        sizeof(char) * rows * columns,cudaMemcpyHostToDevice));
 
 
 	/* 3. Etiquetado inicial */
@@ -260,30 +262,46 @@ int main (int argc, char* argv[])
 	/* 4.1 Flag para ver si ha habido cambios y si se continua la ejecucion */
 	flagCambio=1;
 
+    const int zero = 0;
+
+    gpuErrorCheck(cudaMemcpyToSymbolAsync(flagCambioDevice,&zero, sizeof(char),
+        0,cudaMemcpyHostToDevice,stream[0]));
+    kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[0]>>>(
+        matrixResultCopyDevice,matrixResultDevice);
+
 	for(t=0; flagCambio != 0; t++){
-
 		flagCambio = 0;
-		gpuErrorCheck(cudaMemcpyToSymbolAsync(flagCambioDevice,&flagCambio, sizeof(char),0,cudaMemcpyHostToDevice));
-
-		temp = matrixResultDevice;
-		matrixResultDevice = matrixResultCopyDevice;
-		matrixResultCopyDevice = temp;
-
-		kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice,
-			matrixResultCopyDevice);
-		gpuErrorCheck(cudaPeekAtLastError());
-		gpuErrorCheck(cudaMemcpyFromSymbolAsync(&flagCambio, flagCambioDevice, sizeof(char), 0, cudaMemcpyDeviceToHost));
+        if(t % 2 == 0){
+    		gpuErrorCheck(cudaMemcpyFromSymbolAsync(&flagCambio,
+                flagCambioDevice, sizeof(char), 0, cudaMemcpyDeviceToHost, stream[0]));
+            gpuErrorCheck(cudaMemcpyToSymbolAsync(flagCambioDevice,&zero,
+                sizeof(char),0,cudaMemcpyHostToDevice,stream[1]));
+            kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[1]>>>(
+                matrixResultDevice,matrixResultCopyDevice);
+        } else {
+    		gpuErrorCheck(cudaMemcpyFromSymbolAsync(&flagCambio,
+                flagCambioDevice, sizeof(char), 0, cudaMemcpyDeviceToHost, stream[1]));
+            gpuErrorCheck(cudaMemcpyToSymbolAsync(flagCambioDevice,&zero,
+                sizeof(char),0,cudaMemcpyHostToDevice,stream[0]));
+            kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[0]>>>(
+                matrixResultCopyDevice,matrixResultDevice);
+        }
 	}
 
 
 	/* 4.3 Inicio cuenta del numero de bloques */
 	numBlocks = 0;
-	gpuErrorCheck(cudaMemcpyToSymbolAsync(numBlocksDevice,&numBlocks, sizeof(int),0,cudaMemcpyHostToDevice));
-
-	kernelCountFigures<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice);
+	gpuErrorCheck(cudaMemcpyToSymbolAsync(numBlocksDevice,&numBlocks,
+        sizeof(int),0,cudaMemcpyHostToDevice));
+    if(t % 2 == 0){
+        kernelCountFigures<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice);
+    } else {
+        kernelCountFigures<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultCopyDevice);
+    }
 	gpuErrorCheck(cudaPeekAtLastError());
 
-	gpuErrorCheck(cudaMemcpyFromSymbolAsync(&numBlocks, numBlocksDevice, sizeof(int), 0, cudaMemcpyDeviceToHost));
+	gpuErrorCheck(cudaMemcpyFromSymbolAsync(&numBlocks, numBlocksDevice,
+        sizeof(int), 0, cudaMemcpyDeviceToHost));
 
 //
 // EL CODIGO A PARALELIZAR TERMINA AQUI
@@ -319,6 +337,8 @@ int main (int argc, char* argv[])
 	gpuErrorCheck(cudaFree(matrixDataDevice));
 	gpuErrorCheck(cudaFree(matrixResultDevice));
 	gpuErrorCheck(cudaFree(matrixResultCopyDevice));
+    gpuErrorCheck( cudaStreamDestroy(stream[0]) );
+    gpuErrorCheck( cudaStreamDestroy(stream[1]) );
 
 	/*Liberamos los hilos del DEVICE*/
 	gpuErrorCheck(cudaDeviceReset());
