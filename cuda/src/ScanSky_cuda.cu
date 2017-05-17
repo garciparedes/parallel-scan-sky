@@ -47,17 +47,16 @@ __device__ char flagCambioDevice;
 
 __global__ void kernelFillMatrixResult(int *matrixResult, int *matrixResultCopy) {
 
-	const int i = blockIdx.y * blockDim.y + threadIdx.y;
-	const int j = blockIdx.x * blockDim.x + threadIdx.x;
+    const int ij = (blockIdx.y * blockDim.y + threadIdx.y)*columnsDevice +
+                        blockIdx.x * blockDim.x + threadIdx.x;
 
-	if(i > -1 && i<rowsDevice &&
-		j > -1 && j<columnsDevice){
-		if(matrixDataPointer[i*(columnsDevice)+j] !=0){
-			matrixResult[i*(columnsDevice)+j]=i*(columnsDevice)+j;
-			matrixResultCopy[i*(columnsDevice)+j]=i*(columnsDevice)+j;
+	if(ij > -1 && ij<rowsDevice*columnsDevice){
+		if(matrixDataPointer[ij] !=0){
+			matrixResult[ij]=ij;
+			matrixResultCopy[ij]=ij;
 		} else {
-			matrixResult[i*(columnsDevice)+j]=-1;
-			matrixResultCopy[i*(columnsDevice)+j]=-1;
+			matrixResult[ij]=-1;
+			matrixResultCopy[ij]=-1;
 		}
 	}
 }
