@@ -214,17 +214,20 @@ int main (int argc, char* argv[])
 	cudaMemcpyToSymbolAsync(columnsDevice,&columns, sizeof(int),0,cudaMemcpyHostToDevice);
 	cudaMemcpyToSymbolAsync(matrixDataPointer,&matrixDataDevice, sizeof(char *));
 
-	matrixDataChar = (char *)malloc(rows*(columns) * sizeof(char) );
+	cudaMallocHost((void **) &matrixDataChar, rows*(columns) * sizeof(char));
 	for(i = 0; i < rows * columns; i++){
 		matrixDataChar[i] = matrixData[i];
 	}
 	/*
-	cudaMemcpy2DAsync(matrixDataDevice,
-		rows*sizeof(char) +	pitch,
+	cudaMemcpy2DAsync(
+		matrixDataDevice,
+		pitch,
 		matrixDataChar,
 		rows*sizeof(char),
-    	1,
-		columns, cudaMemcpyHostToDevice);
+		rows*sizeof(char),
+		columns,
+		cudaMemcpyHostToDevice
+	);
 	*/
 	cudaMemcpyAsync(matrixDataDevice,matrixDataChar, sizeof(char) * rows * columns,cudaMemcpyHostToDevice);
 
