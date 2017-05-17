@@ -273,7 +273,7 @@ int main (int argc, char* argv[])
 		kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice,
 			matrixResultCopyDevice);
 		gpuErrorCheck(cudaPeekAtLastError());
-		gpuErrorCheck(cudaMemcpyFromSymbol(&flagCambio, flagCambioDevice, sizeof(char), 0, cudaMemcpyDeviceToHost));
+		gpuErrorCheck(cudaMemcpyFromSymbolAsync(&flagCambio, flagCambioDevice, sizeof(char), 0, cudaMemcpyDeviceToHost));
 	}
 
 
