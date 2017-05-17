@@ -24,6 +24,24 @@
 #define rowsBloqShape 8
 #define columnsBloqShape 16
 
+
+/*
+*
+* CUDA MEMCHECK
+* code from: http://www.orangeowlsolutions.com/archives/613
+*/
+#define gpuErrorCheck(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+
+inline void gpuAssert(cudaError_t code, char *file, int line, bool abort = true)
+{
+    if (code != cudaSuccess)
+    {
+      fprintf(stderr, "GPUassert: %s %s %dn", cudaGetErrorString(code), file, line);
+      if (abort) { exit(code); }
+    }
+}
+
+
 __device__ __constant__ int rowsDevice;
 __device__ __constant__ int columnsDevice;
 __device__ __constant__ char* matrixDataPointer;
@@ -187,8 +205,8 @@ int main (int argc, char* argv[])
 		}
 	#endif
 
-	cudaSetDevice(0);
-	cudaDeviceSynchronize();
+	gpuErrorCheck(cudaSetDevice(0));
+	gpuErrorCheck(cudaDeviceSynchronize());
 
 	/* PUNTO DE INICIO MEDIDA DE TIEMPO */
 	double t_ini = cp_Wtime();
@@ -206,15 +224,17 @@ int main (int argc, char* argv[])
 
 	size_t pitch1,pitch2,pitch3;
 
-	cudaMallocPitch(&matrixResultDevice, &pitch1, rows*sizeof(int), columns);
-	cudaMallocPitch(&matrixResultCopyDevice, &pitch2, rows*sizeof(int), columns);
-	cudaMallocPitch(&matrixDataDevice, &pitch3, rows*sizeof(char), columns);
+	gpuErrorCheck(cudaMallocPitch(&matrixResultDevice, &pitch1, rows*sizeof(int), columns));
+	gpuErrorCheck(cudaMallocPitch(&matrixResultCopyDevice, &pitch2, rows*sizeof(int), columns));
+	gpuErrorCheck(cudaMallocPitch(&matrixDataDevice, &pitch3, rows*sizeof(char), columns));
+	//gpuErrorCheck(cudaMalloc(&matrixDataDevice, sizeof(char) * rows * columns));
 
-	cudaMemcpyToSymbolAsync(rowsDevice,&rows, sizeof(int),0,cudaMemcpyHostToDevice);
-	cudaMemcpyToSymbolAsync(columnsDevice,&columns, sizeof(int),0,cudaMemcpyHostToDevice);
-	cudaMemcpyToSymbolAsync(matrixDataPointer,&matrixDataDevice, sizeof(char *));
+	gpuErrorCheck(cudaMemcpyToSymbolAsync(rowsDevice,&rows, sizeof(int),0,cudaMemcpyHostToDevice));
+	gpuErrorCheck(cudaMemcpyToSymbolAsync(columnsDevice,&columns, sizeof(int),0,cudaMemcpyHostToDevice));
+	gpuErrorCheck(cudaMemcpyToSymbolAsync(matrixDataPointer,&matrixDataDevice, sizeof(char *)));
 
-	cudaMallocHost(&matrixDataChar, rows*(columns) * sizeof(char));
+	//gpuErrorCheck(cudaMallocHost(&matrixDataChar, rows*(columns) * sizeof(char)));
+	matrixDataChar= (char *)malloc( rows*(columns) * sizeof(char) );
 	for(i = 0; i < rows * columns; i++){
 		matrixDataChar[i] = matrixData[i];
 	}
@@ -229,7 +249,7 @@ int main (int argc, char* argv[])
 		cudaMemcpyHostToDevice
 	);
 	*/
-	cudaMemcpyAsync(matrixDataDevice,matrixDataChar, sizeof(char) * rows * columns,cudaMemcpyHostToDevice);
+	gpuErrorCheck(cudaMemcpyAsync(matrixDataDevice,matrixDataChar, sizeof(char) * rows * columns,cudaMemcpyHostToDevice));
 
 
 	/* 3. Etiquetado inicial */
@@ -237,6 +257,7 @@ int main (int argc, char* argv[])
 
 	kernelFillMatrixResult<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice,
 		matrixResultCopyDevice);
+	gpuErrorCheck(cudaPeekAtLastError());
 
 	/* 4. Computacion */
 	t=0;
@@ -246,7 +267,7 @@ int main (int argc, char* argv[])
 	for(t=0; flagCambio != 0; t++){
 
 		flagCambio = 0;
-		cudaMemcpyToSymbolAsync(flagCambioDevice,&flagCambio, sizeof(char),0,cudaMemcpyHostToDevice);
+		gpuErrorCheck(cudaMemcpyToSymbolAsync(flagCambioDevice,&flagCambio, sizeof(char),0,cudaMemcpyHostToDevice));
 
 		temp = matrixResultDevice;
 		matrixResultDevice = matrixResultCopyDevice;
@@ -254,24 +275,26 @@ int main (int argc, char* argv[])
 
 		kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice,
 			matrixResultCopyDevice);
-		cudaMemcpyFromSymbol(&flagCambio, flagCambioDevice, sizeof(char), 0, cudaMemcpyDeviceToHost);
+		gpuErrorCheck(cudaPeekAtLastError());
+		gpuErrorCheck(cudaMemcpyFromSymbol(&flagCambio, flagCambioDevice, sizeof(char), 0, cudaMemcpyDeviceToHost));
 	}
 
 
 	/* 4.3 Inicio cuenta del numero de bloques */
 	numBlocks = 0;
-	cudaMemcpyToSymbolAsync(numBlocksDevice,&numBlocks, sizeof(int),0,cudaMemcpyHostToDevice);
+	gpuErrorCheck(cudaMemcpyToSymbolAsync(numBlocksDevice,&numBlocks, sizeof(int),0,cudaMemcpyHostToDevice));
 
 	kernelCountFigures<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice);
+	gpuErrorCheck(cudaPeekAtLastError());
 
-	cudaMemcpyFromSymbolAsync(&numBlocks, numBlocksDevice, sizeof(int), 0, cudaMemcpyDeviceToHost);
+	gpuErrorCheck(cudaMemcpyFromSymbolAsync(&numBlocks, numBlocksDevice, sizeof(int), 0, cudaMemcpyDeviceToHost));
 
 //
 // EL CODIGO A PARALELIZAR TERMINA AQUI
 //
 
 	/* PUNTO DE FINAL DE MEDIDA DE TIEMPO */
-	cudaDeviceSynchronize();
+	gpuErrorCheck(cudaDeviceSynchronize());
  	double t_fin = cp_Wtime();
 
 
@@ -296,12 +319,12 @@ int main (int argc, char* argv[])
 	free(matrixResultCopy);
 
 	/*Liberamos memoria del DEVICE*/
-	cudaFree(matrixDataPointer);
-	cudaFree(matrixDataDevice);
-	cudaFree(matrixResultDevice);
-	cudaFree(matrixResultCopyDevice);
+	gpuErrorCheck(cudaFree(matrixDataPointer));
+	gpuErrorCheck(cudaFree(matrixDataDevice));
+	gpuErrorCheck(cudaFree(matrixResultDevice));
+	gpuErrorCheck(cudaFree(matrixResultCopyDevice));
 
 	/*Liberamos los hilos del DEVICE*/
-	cudaDeviceReset();
+	gpuErrorCheck(cudaDeviceReset());
 	return 0;
 }
