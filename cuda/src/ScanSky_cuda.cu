@@ -23,12 +23,14 @@
 
 #define rowsBloqShape 8
 #define columnsBloqShape 16
+#define nStreams 8
 
 
 /*
 *
 * CUDA MEMCHECK
-* code from: http://www.orangeowlsolutions.com/archives/613
+* Code from: http://www.orangeowlsolutions.com/archives/613
+* Adapted by: @garciparedes
 */
 #define gpuErrorCheck(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort = true) {
@@ -45,9 +47,9 @@ __device__ __constant__ char* matrixDataPointer;
 __device__ int numBlocksDevice;
 __device__ char flagCambioDevice;
 
-__global__ void kernelFillMatrixResult(int *matrixResult, int *matrixResultCopy) {
+__global__ void kernelFillMatrixResult(int *matrixResult, int *matrixResultCopy, int offset = 0) {
 
-    const int ij = (blockIdx.y * blockDim.y + threadIdx.y)*columnsDevice +
+    const int ij = (blockIdx.y * blockDim.y + threadIdx.y + offset)*columnsDevice +
                         blockIdx.x * blockDim.x + threadIdx.x;
 
 	if(ij > -1 && ij<rowsDevice*columnsDevice){
@@ -61,9 +63,9 @@ __global__ void kernelFillMatrixResult(int *matrixResult, int *matrixResultCopy)
 	}
 }
 
-__global__ void kernelComputationLoop(int *matrixResult,int *matrixResultCopy) {
+__global__ void kernelComputationLoop(int *matrixResult,int *matrixResultCopy, int offset = 0) {
 
-	const int i = blockIdx.y * blockDim.y + threadIdx.y;
+	const int i = blockIdx.y * blockDim.y + threadIdx.y + offset;
 	const int j = blockIdx.x * blockDim.x + threadIdx.x;
 
 	/* 4.2.2 Computo y detecto si ha habido cambios */
@@ -101,9 +103,9 @@ __global__ void kernelComputationLoop(int *matrixResult,int *matrixResultCopy) {
 	}
 }
 
-__global__ void kernelCountFigures(int *matrixResult) {
+__global__ void kernelCountFigures(int *matrixResult, int offset = 0) {
 
-	const int i = blockIdx.y * blockDim.y + threadIdx.y;
+	const int i = blockIdx.y * blockDim.y + threadIdx.y + offset;
  	const int j = blockIdx.x * blockDim.x + threadIdx.x;
 
 	if(i > 0 && i<rowsDevice-1 &&
@@ -212,12 +214,22 @@ int main (int argc, char* argv[])
 //
 
 
+    cudaStream_t stream[nStreams];
+
 	const dim3 bloqShapeGpu(columnsBloqShape,rowsBloqShape);
 	const dim3 gridShapeGpu(
 		ceil((float) columns / columnsBloqShape),
 		ceil((float) rows / rowsBloqShape)
 	);
 
+    const dim3 gridShapeGpuStream(
+        ceil((float) columns / columnsBloqShape),
+        ceil((float) ceil((float) rows / rowsBloqShape)/ nStreams)
+    );
+
+    for (int i = 0; i < nStreams; ++i) {
+        gpuErrorCheck( cudaStreamCreate(&stream[i]) );
+    }
 	size_t pitch1,pitch2,pitch3;
 
 	gpuErrorCheck(cudaMallocPitch(&matrixResultDevice, &pitch1, rows*sizeof(int), columns));
@@ -250,9 +262,10 @@ int main (int argc, char* argv[])
 
 	/* 3. Etiquetado inicial */
 
-
-	kernelFillMatrixResult<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice,
-		matrixResultCopyDevice);
+    for (int i = 0; i < nStreams; ++i) {
+        kernelFillMatrixResult<<<gridShapeGpuStream, bloqShapeGpu,0, stream[i]>>>(
+            matrixResultDevice, matrixResultCopyDevice, i * ceil((float)(rows-1)/nStreams));
+    }
 	gpuErrorCheck(cudaPeekAtLastError());
 
 	/* 4. Computacion */
@@ -269,9 +282,12 @@ int main (int argc, char* argv[])
 		matrixResultDevice = matrixResultCopyDevice;
 		matrixResultCopyDevice = temp;
 
-		kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice,
-			matrixResultCopyDevice);
-		gpuErrorCheck(cudaPeekAtLastError());
+
+        for (int i = 0; i < nStreams; ++i) {
+            kernelComputationLoop<<<gridShapeGpuStream, bloqShapeGpu,0, stream[i]>>>(matrixResultDevice,
+                matrixResultCopyDevice, i * ceil((float)(rows-1)/nStreams));
+        }
+        gpuErrorCheck(cudaPeekAtLastError());
 		gpuErrorCheck(cudaMemcpyFromSymbolAsync(&flagCambio, flagCambioDevice, sizeof(char), 0, cudaMemcpyDeviceToHost));
 	}
 
@@ -281,7 +297,16 @@ int main (int argc, char* argv[])
 	gpuErrorCheck(cudaMemcpyToSymbolAsync(numBlocksDevice,&numBlocks, sizeof(int),0,cudaMemcpyHostToDevice));
 
 	kernelCountFigures<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice);
-	gpuErrorCheck(cudaPeekAtLastError());
+
+    /*
+    for (int i = 0; i < nStreams; ++i) {
+        kernelCountFigures<<<gridShapeGpuStream, bloqShapeGpu,sizeof(int), stream[i]>>>(matrixResultDevice,
+            i * rows/nStreams));
+    }
+    */
+
+
+    gpuErrorCheck(cudaPeekAtLastError());
 
 	gpuErrorCheck(cudaMemcpyFromSymbolAsync(&numBlocks, numBlocksDevice, sizeof(int), 0, cudaMemcpyDeviceToHost));
 
@@ -319,7 +344,9 @@ int main (int argc, char* argv[])
 	gpuErrorCheck(cudaFree(matrixDataDevice));
 	gpuErrorCheck(cudaFree(matrixResultDevice));
 	gpuErrorCheck(cudaFree(matrixResultCopyDevice));
-
+    for (int i = 0; i < nStreams; ++i){
+        gpuErrorCheck( cudaStreamDestroy(stream[i]) );
+    }
 	/*Liberamos los hilos del DEVICE*/
 	gpuErrorCheck(cudaDeviceReset());
 	return 0;
