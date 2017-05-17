@@ -29,8 +29,11 @@ __device__ __constant__ int columnsDevice;
 __device__ __constant__ char* matrixDataPointer;
 __device__ int numBlocksDevice;
 __device__ char flagCambioDevice;
+__device__ int* matrixResultPointer;
+__device__ int* matrixResultCopyPointer;
+__device__ int* temPointer;
 
-__global__ void kernelFillMatrixResult(int *matrixResult, int *matrixResultCopy) {
+__global__ void kernelFillMatrixResult() {
 
 	const int i = blockIdx.y * blockDim.y + threadIdx.y;
 	const int j = blockIdx.x * blockDim.x + threadIdx.x;
@@ -38,63 +41,69 @@ __global__ void kernelFillMatrixResult(int *matrixResult, int *matrixResultCopy)
 	if(i > -1 && i<rowsDevice &&
 		j > -1 && j<columnsDevice){
 		if(matrixDataPointer[i*(columnsDevice)+j] !=0){
-			matrixResult[i*(columnsDevice)+j]=i*(columnsDevice)+j;
-			matrixResultCopy[i*(columnsDevice)+j]=i*(columnsDevice)+j;
+			matrixResultPointer[i*(columnsDevice)+j]=i*(columnsDevice)+j;
+			matrixResultCopyPointer[i*(columnsDevice)+j]=i*(columnsDevice)+j;
 		} else {
-			matrixResult[i*(columnsDevice)+j]=-1;
-			matrixResultCopy[i*(columnsDevice)+j]=-1;
+			matrixResultPointer[i*(columnsDevice)+j]=-1;
+			matrixResultCopyPointer[i*(columnsDevice)+j]=-1;
 		}
 	}
 }
 
-__global__ void kernelComputationLoop(int *matrixResult,int *matrixResultCopy) {
+__global__ void kernelComputationLoop() {
 
 	const int i = blockIdx.y * blockDim.y + threadIdx.y;
 	const int j = blockIdx.x * blockDim.x + threadIdx.x;
+	if(i == 0 && j == 0 ){
+		temPointer = matrixResultPointer;
+		matrixResultPointer = matrixResultCopyPointer;
+		matrixResultCopyPointer = temPointer;
+	}
+	//__syncthreads();
 
 	/* 4.2.2 Computo y detecto si ha habido cambios */
 	if(i > 0 && i<rowsDevice-1 &&
 		j > 0 && j<columnsDevice-1){
 
-		if(matrixResult[i*columnsDevice+j] != -1){
+		if(matrixResultPointer[i*columnsDevice+j] != -1){
 
-			matrixResult[i*columnsDevice+j] = matrixResultCopy[i*columnsDevice+j];
+			matrixResultPointer[i*columnsDevice+j] = matrixResultCopyPointer[i*columnsDevice+j];
 			if((matrixDataPointer[(i-1)*columnsDevice+j] == matrixDataPointer[i*columnsDevice+j]) &&
-				(matrixResult[i*columnsDevice+j] > matrixResultCopy[(i-1)*columnsDevice+j]))
+				(matrixResultPointer[i*columnsDevice+j] > matrixResultCopyPointer[(i-1)*columnsDevice+j]))
 			{
-				matrixResult[i*columnsDevice+j] = matrixResultCopy[(i-1)*columnsDevice+j];
+				matrixResultPointer[i*columnsDevice+j] = matrixResultCopyPointer[(i-1)*columnsDevice+j];
 				flagCambioDevice = 1;
 			}
 			if((matrixDataPointer[(i+1)*columnsDevice+j] == matrixDataPointer[i*columnsDevice+j]) &&
-				(matrixResult[i*columnsDevice+j] > matrixResultCopy[(i+1)*columnsDevice+j]))
+				(matrixResultPointer[i*columnsDevice+j] > matrixResultCopyPointer[(i+1)*columnsDevice+j]))
 			{
-				matrixResult[i*columnsDevice+j] = matrixResultCopy[(i+1)*columnsDevice+j];
+				matrixResultPointer[i*columnsDevice+j] = matrixResultCopyPointer[(i+1)*columnsDevice+j];
 				flagCambioDevice = 1;
 			}
 			if((matrixDataPointer[i*columnsDevice+j-1] == matrixDataPointer[i*columnsDevice+j]) &&
-				(matrixResult[i*columnsDevice+j] > matrixResultCopy[i*columnsDevice+j-1]))
+				(matrixResultPointer[i*columnsDevice+j] > matrixResultCopyPointer[i*columnsDevice+j-1]))
 			{
-				matrixResult[i*columnsDevice+j] = matrixResultCopy[i*columnsDevice+j-1];
+				matrixResultPointer[i*columnsDevice+j] = matrixResultCopyPointer[i*columnsDevice+j-1];
 				flagCambioDevice = 1;
 			}
 			if((matrixDataPointer[i*columnsDevice+j+1] == matrixDataPointer[i*columnsDevice+j]) &&
-				(matrixResult[i*columnsDevice+j] > matrixResultCopy[i*columnsDevice+j+1]))
+				(matrixResultPointer[i*columnsDevice+j] > matrixResultCopyPointer[i*columnsDevice+j+1]))
 			{
-				matrixResult[i*columnsDevice+j] = matrixResultCopy[i*columnsDevice+j+1];
+				matrixResultPointer[i*columnsDevice+j] = matrixResultCopyPointer[i*columnsDevice+j+1];
 				flagCambioDevice = 1;
 			}
 		}
 	}
 }
 
-__global__ void kernelCountFigures(int *matrixResult) {
+__global__ void kernelCountFigures() {
 
 	const int i = blockIdx.y * blockDim.y + threadIdx.y;
  	const int j = blockIdx.x * blockDim.x + threadIdx.x;
 
 	if(i > 0 && i<rowsDevice-1 &&
 		j > 0 && j<columnsDevice-1 &&
-			matrixResult[i*columnsDevice+j] == i*columnsDevice+j) {
+			matrixResultPointer[i*columnsDevice+j] == i*columnsDevice+j) {
 				atomicAdd(&numBlocksDevice, 1);
 	}
 }
@@ -212,6 +221,8 @@ int main (int argc, char* argv[])
 	cudaMemcpyToSymbolAsync(rowsDevice,&rows, sizeof(int),0,cudaMemcpyHostToDevice);
 	cudaMemcpyToSymbolAsync(columnsDevice,&columns, sizeof(int),0,cudaMemcpyHostToDevice);
 	cudaMemcpyToSymbolAsync(matrixDataPointer,&matrixDataDevice, sizeof(char *));
+	cudaMemcpyToSymbolAsync(matrixResultPointer,&matrixResultDevice, sizeof(int *));
+	cudaMemcpyToSymbolAsync(matrixResultCopyPointer,&matrixResultCopyDevice, sizeof(int *));
 
 	matrixDataChar = (char *)malloc(rows*(columns) * sizeof(char) );
 	for(i = 0; i < rows * columns; i++){
@@ -224,8 +235,7 @@ int main (int argc, char* argv[])
 	/* 3. Etiquetado inicial */
 
 
-	kernelFillMatrixResult<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice,
-		matrixResultCopyDevice);
+	kernelFillMatrixResult<<<gridShapeGpu, bloqShapeGpu>>>();
 
 	/* 4. Computacion */
 	t=0;
@@ -237,12 +247,14 @@ int main (int argc, char* argv[])
 		flagCambio = 0;
 		cudaMemcpyToSymbolAsync(flagCambioDevice,&flagCambio, sizeof(char),0,cudaMemcpyHostToDevice);
 
-		temp = matrixResultDevice;
-		matrixResultDevice = matrixResultCopyDevice;
-		matrixResultCopyDevice = temp;
+		//temp = matrixResultDevice;
+		//matrixResultDevice = matrixResultCopyDevice;
+		//matrixResultCopyDevice = temp;
 
-		kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice,
-			matrixResultCopyDevice);
+		//cudaMemcpyToSymbolAsync(matrixResultPointer,&matrixResultCopyDevice, sizeof(int *));
+		//cudaMemcpyToSymbolAsync(matrixResultCopyPointer,&matrixResultDevice, sizeof(int *));
+
+		kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu>>>();
 		cudaMemcpyFromSymbol(&flagCambio, flagCambioDevice, sizeof(char), 0, cudaMemcpyDeviceToHost);
 	}
 
@@ -251,7 +263,7 @@ int main (int argc, char* argv[])
 	numBlocks = 0;
 	cudaMemcpyToSymbolAsync(numBlocksDevice,&numBlocks, sizeof(int),0,cudaMemcpyHostToDevice);
 
-	kernelCountFigures<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice);
+	kernelCountFigures<<<gridShapeGpu, bloqShapeGpu>>>();
 
 	cudaMemcpyFromSymbolAsync(&numBlocks, numBlocksDevice, sizeof(int), 0, cudaMemcpyDeviceToHost);
 
