@@ -31,13 +31,10 @@
 * code from: http://www.orangeowlsolutions.com/archives/613
 */
 #define gpuErrorCheck(ans) { gpuAssert((ans), __FILE__, __LINE__); }
-
-inline void gpuAssert(cudaError_t code, char *file, int line, bool abort = true)
-{
-    if (code != cudaSuccess)
-    {
-      fprintf(stderr, "GPUassert: %s %s %dn", cudaGetErrorString(code), file, line);
-      if (abort) { exit(code); }
+inline void gpuAssert(cudaError_t code, char *file, int line, bool abort = true) {
+    if (code != cudaSuccess) {
+		fprintf(stderr, "GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+		if (abort) { exit(code); }
     }
 }
 
@@ -239,7 +236,7 @@ int main (int argc, char* argv[])
 		matrixDataChar[i] = matrixData[i];
 	}
 	/*
-	cudaMemcpy2DAsync(
+	gpuErrorCheck(cudaMemcpy2D(
 		matrixDataDevice,
 		pitch3,
 		matrixDataChar,
@@ -247,7 +244,7 @@ int main (int argc, char* argv[])
 		rows*sizeof(char),
 		columns,
 		cudaMemcpyHostToDevice
-	);
+	));
 	*/
 	gpuErrorCheck(cudaMemcpyAsync(matrixDataDevice,matrixDataChar, sizeof(char) * rows * columns,cudaMemcpyHostToDevice));
 
