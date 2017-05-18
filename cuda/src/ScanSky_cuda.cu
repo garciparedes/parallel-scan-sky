@@ -218,6 +218,7 @@ int main (int argc, char* argv[])
         gpuErrorCheck( cudaStreamCreate(&stream[i]) );
     }
 
+
 	const dim3 bloqShapeGpu(columnsBloqShape,rowsBloqShape);
 	const dim3 gridShapeGpu(
 		ceil((float) columns / columnsBloqShape),
@@ -225,6 +226,7 @@ int main (int argc, char* argv[])
 	);
 
 	size_t pitch,pitch3;
+
 
     gpuErrorCheck(cudaMalloc(&flagCambioDevice1, sizeof(char)));
     gpuErrorCheck(cudaMalloc(&flagCambioDevice2, sizeof(char)));
@@ -300,6 +302,7 @@ int main (int argc, char* argv[])
             gpuErrorCheck(cudaMemcpyAsync(flagCambioDevice1,&zero, sizeof(char),
                 cudaMemcpyHostToDevice,stream[0]));
             kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[0]>>>(
+
                 matrixResult1Device,matrixResult4Device,flagCambioDevice1);
         } else if(t % nStreams == 1){
             gpuErrorCheck(cudaMemcpyAsync(&flagCambio,flagCambioDevice2, sizeof(char),
@@ -307,6 +310,7 @@ int main (int argc, char* argv[])
             gpuErrorCheck(cudaMemcpyAsync(flagCambioDevice2,&zero, sizeof(char),
                 cudaMemcpyHostToDevice,stream[1]));
             kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[1]>>>(
+
                 matrixResult2Device,matrixResult1Device,flagCambioDevice2);
         } else if(t % nStreams == 2){
             gpuErrorCheck(cudaMemcpyAsync(&flagCambio,flagCambioDevice3, sizeof(char),
@@ -314,6 +318,7 @@ int main (int argc, char* argv[])
             gpuErrorCheck(cudaMemcpyAsync(flagCambioDevice3,&zero, sizeof(char),
                 cudaMemcpyHostToDevice,stream[2]));
             kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[2]>>>(
+
                 matrixResult3Device,matrixResult2Device,flagCambioDevice3);
         } else {
             gpuErrorCheck(cudaMemcpyAsync(&flagCambio,flagCambioDevice4, sizeof(char),
@@ -324,6 +329,7 @@ int main (int argc, char* argv[])
                 matrixResult4Device,matrixResult3Device,flagCambioDevice4);
         }
 	}
+
 
 
 	/* 4.3 Inicio cuenta del numero de bloques */
