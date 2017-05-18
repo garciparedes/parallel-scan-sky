@@ -63,8 +63,8 @@ __global__ void kernelFillMatrixResult(int *matrixResult, int *matrixResultCopy)
 
 __global__ void kernelComputationLoop(int *matrixResult,int *matrixResultCopy) {
 
-	const int i = blockIdx.y * blockDim.y + threadIdx.y;
-	const int j = blockIdx.x * blockDim.x + threadIdx.x;
+	const int i = blockIdx.y * blockDim.y + threadIdx.y+1;
+	const int j = blockIdx.x * blockDim.x + threadIdx.x+1;
 
 	/* 4.2.2 Computo y detecto si ha habido cambios */
 	if(i > 0 && i<rowsDevice-1 &&
@@ -103,8 +103,8 @@ __global__ void kernelComputationLoop(int *matrixResult,int *matrixResultCopy) {
 
 __global__ void kernelCountFigures(int *matrixResult) {
 
-	const int i = blockIdx.y * blockDim.y + threadIdx.y;
- 	const int j = blockIdx.x * blockDim.x + threadIdx.x;
+	const int i = blockIdx.y * blockDim.y + threadIdx.y+1;
+ 	const int j = blockIdx.x * blockDim.x + threadIdx.x+1;
 
 	if(i > 0 && i<rowsDevice-1 &&
 		j > 0 && j<columnsDevice-1 &&
@@ -218,6 +218,11 @@ int main (int argc, char* argv[])
 		ceil((float) rows / rowsBloqShape)
 	);
 
+    const dim3 gridShapeGpuMin(
+        ceil((float) (columns-1) / columnsBloqShape),
+        ceil((float) (rows-1) / rowsBloqShape)
+    );
+
 	size_t pitch1,pitch2,pitch3;
 
 	gpuErrorCheck(cudaMallocPitch(&matrixResultDevice, &pitch1, rows*sizeof(int), columns));
@@ -269,7 +274,7 @@ int main (int argc, char* argv[])
 		matrixResultDevice = matrixResultCopyDevice;
 		matrixResultCopyDevice = temp;
 
-		kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice,
+		kernelComputationLoop<<<gridShapeGpuMin, bloqShapeGpu>>>(matrixResultDevice,
 			matrixResultCopyDevice);
 		gpuErrorCheck(cudaPeekAtLastError());
 		gpuErrorCheck(cudaMemcpyFromSymbolAsync(&flagCambio, flagCambioDevice, sizeof(char), 0, cudaMemcpyDeviceToHost));
@@ -280,7 +285,7 @@ int main (int argc, char* argv[])
 	numBlocks = 0;
 	gpuErrorCheck(cudaMemcpyToSymbolAsync(numBlocksDevice,&numBlocks, sizeof(int),0,cudaMemcpyHostToDevice));
 
-	kernelCountFigures<<<gridShapeGpu, bloqShapeGpu>>>(matrixResultDevice);
+	kernelCountFigures<<<gridShapeGpuMin, bloqShapeGpu>>>(matrixResultDevice);
 	gpuErrorCheck(cudaPeekAtLastError());
 
 	gpuErrorCheck(cudaMemcpyFromSymbolAsync(&numBlocks, numBlocksDevice, sizeof(int), 0, cudaMemcpyDeviceToHost));
