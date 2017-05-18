@@ -280,29 +280,37 @@ int main (int argc, char* argv[])
         cudaMemcpyHostToDevice,stream[0]));
     kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[0]>>>(
         matrixResult1Device,matrixResult3Device,flagCambioDevice1);
-	for(t=0; flagCambio != 0; t++){
+    gpuErrorCheck(cudaMemcpyAsync(flagCambioDevice2,&zero, sizeof(char),
+        cudaMemcpyHostToDevice,stream[0]));
+    kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[0]>>>(
+        matrixResult2Device,matrixResult1Device,flagCambioDevice2);
+    gpuErrorCheck(cudaMemcpyAsync(flagCambioDevice3,&zero, sizeof(char),
+        cudaMemcpyHostToDevice,stream[0]));
+    kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[0]>>>(
+        matrixResult3Device,matrixResult2Device,flagCambioDevice3);
+    for(t=0; flagCambio != 0; t++){
 		flagCambio = 0;
         if(t % 3 == 0){
             gpuErrorCheck(cudaMemcpyAsync(&flagCambio,flagCambioDevice1, sizeof(char),
                 cudaMemcpyDeviceToHost,stream[0]));
-    		gpuErrorCheck(cudaMemcpyAsync(flagCambioDevice2,&zero, sizeof(char),
-                cudaMemcpyHostToDevice,stream[1]));
-            kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[1]>>>(
-                matrixResult2Device,matrixResult1Device,flagCambioDevice2);
-        } else if(t % 3 == 1){
-            gpuErrorCheck(cudaMemcpyAsync(&flagCambio,flagCambioDevice2, sizeof(char),
-                cudaMemcpyDeviceToHost,stream[1]));
-            gpuErrorCheck(cudaMemcpyAsync(flagCambioDevice3,&zero, sizeof(char),
-                cudaMemcpyHostToDevice,stream[2]));
-            kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[2]>>>(
-                matrixResult3Device,matrixResult2Device,flagCambioDevice3);
-        } else {
-            gpuErrorCheck(cudaMemcpyAsync(&flagCambio,flagCambioDevice3, sizeof(char),
-                cudaMemcpyDeviceToHost,stream[2]));
             gpuErrorCheck(cudaMemcpyAsync(flagCambioDevice1,&zero, sizeof(char),
                 cudaMemcpyHostToDevice,stream[0]));
             kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[0]>>>(
                 matrixResult1Device,matrixResult3Device,flagCambioDevice1);
+        } else if(t % 3 == 1){
+            gpuErrorCheck(cudaMemcpyAsync(&flagCambio,flagCambioDevice2, sizeof(char),
+                cudaMemcpyDeviceToHost,stream[1]));
+            gpuErrorCheck(cudaMemcpyAsync(flagCambioDevice2,&zero, sizeof(char),
+                cudaMemcpyHostToDevice,stream[1]));
+            kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[1]>>>(
+                matrixResult2Device,matrixResult1Device,flagCambioDevice2);
+        } else {
+            gpuErrorCheck(cudaMemcpyAsync(&flagCambio,flagCambioDevice3, sizeof(char),
+                cudaMemcpyDeviceToHost,stream[2]));
+            gpuErrorCheck(cudaMemcpyAsync(flagCambioDevice3,&zero, sizeof(char),
+                cudaMemcpyHostToDevice,stream[2]));
+            kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[2]>>>(
+                matrixResult3Device,matrixResult2Device,flagCambioDevice3);
         }
 	}
 
