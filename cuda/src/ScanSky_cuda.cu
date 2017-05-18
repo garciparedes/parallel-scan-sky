@@ -23,7 +23,7 @@
 
 #define rowsBloqShape 8
 #define columnsBloqShape 16
-
+#define nStreams 4
 
 /*
 *
@@ -44,20 +44,16 @@ __device__ __constant__ int columnsDevice;
 __device__ __constant__ char* matrixDataPointer;
 __device__ int numBlocksDevice;
 
-__global__ void kernelFillMatrixResult(int *matrixResult1, int *matrixResult2, int *matrixResult3) {
+__global__ void kernelFillMatrixResult(int *matrixResult) {
 
     const int ij = (blockIdx.y * blockDim.y + threadIdx.y)*columnsDevice +
                         blockIdx.x * blockDim.x + threadIdx.x;
 
 	if(ij > -1 && ij<rowsDevice*columnsDevice){
 		if(matrixDataPointer[ij] !=0){
-			matrixResult1[ij]=ij;
-            matrixResult2[ij]=ij;
-            matrixResult3[ij]=ij;
+            matrixResult[ij]=ij;
 		} else {
-			matrixResult1[ij]=-1;
-            matrixResult2[ij]=-1;
-            matrixResult3[ij]=-1;
+            matrixResult[ij]=-1;
 		}
 	}
 }
@@ -119,6 +115,7 @@ __global__ void kernelCountFigures(int *matrixResult) {
 */
 int main (int argc, char* argv[])
 {
+    const char zero = 0;
 
 	/* 1. Leer argumento y declaraciones */
 	if (argc < 2) 	{
@@ -141,9 +138,11 @@ int main (int argc, char* argv[])
 	int *matrixResult1Device;
     int *matrixResult2Device;
     int *matrixResult3Device;
+    int *matrixResult4Device;
     char *flagCambioDevice1;
     char *flagCambioDevice2;
     char *flagCambioDevice3;
+    char *flagCambioDevice4;
 
 	/* 2. Leer Fichero de entrada e inicializar datos */
 
@@ -214,10 +213,11 @@ int main (int argc, char* argv[])
 //
 // EL CODIGO A PARALELIZAR COMIENZA AQUI
 //
-    cudaStream_t stream[3];
+    cudaStream_t stream[4];
     gpuErrorCheck( cudaStreamCreate(&stream[0]) );
     gpuErrorCheck( cudaStreamCreate(&stream[1]) );
     gpuErrorCheck( cudaStreamCreate(&stream[2]) );
+    gpuErrorCheck( cudaStreamCreate(&stream[3]) );
 
 	const dim3 bloqShapeGpu(columnsBloqShape,rowsBloqShape);
 	const dim3 gridShapeGpu(
@@ -230,9 +230,11 @@ int main (int argc, char* argv[])
     gpuErrorCheck(cudaMalloc(&flagCambioDevice1, sizeof(char)));
     gpuErrorCheck(cudaMalloc(&flagCambioDevice2, sizeof(char)));
     gpuErrorCheck(cudaMalloc(&flagCambioDevice3, sizeof(char)));
+    gpuErrorCheck(cudaMalloc(&flagCambioDevice4, sizeof(char)));
     gpuErrorCheck(cudaMallocPitch(&matrixResult1Device, &pitch, rows*sizeof(int), columns));
     gpuErrorCheck(cudaMallocPitch(&matrixResult2Device, &pitch, rows*sizeof(int), columns));
     gpuErrorCheck(cudaMallocPitch(&matrixResult3Device, &pitch, rows*sizeof(int), columns));
+    gpuErrorCheck(cudaMallocPitch(&matrixResult4Device, &pitch, rows*sizeof(int), columns));
 	gpuErrorCheck(cudaMallocPitch(&matrixDataDevice, &pitch3, rows*sizeof(char), columns));
 	//gpuErrorCheck(cudaMalloc(&matrixDataDevice, sizeof(char) * rows * columns));
 
@@ -263,8 +265,7 @@ int main (int argc, char* argv[])
 	/* 3. Etiquetado inicial */
 
 
-	kernelFillMatrixResult<<<gridShapeGpu, bloqShapeGpu>>>(matrixResult1Device,
-		matrixResult2Device, matrixResult3Device);
+	kernelFillMatrixResult<<<gridShapeGpu, bloqShapeGpu>>>(matrixResult4Device);
 	gpuErrorCheck(cudaPeekAtLastError());
 
 	/* 4. Computacion */
@@ -272,45 +273,56 @@ int main (int argc, char* argv[])
 	/* 4.1 Flag para ver si ha habido cambios y si se continua la ejecucion */
 	flagCambio=1;
 
-    const char zero = 0;
-
-
-
     gpuErrorCheck(cudaMemcpyAsync(flagCambioDevice1,&zero, sizeof(char),
         cudaMemcpyHostToDevice,stream[0]));
     kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[0]>>>(
-        matrixResult1Device,matrixResult3Device,flagCambioDevice1);
+        matrixResult1Device,matrixResult4Device,flagCambioDevice1);
+
     gpuErrorCheck(cudaMemcpyAsync(flagCambioDevice2,&zero, sizeof(char),
         cudaMemcpyHostToDevice,stream[0]));
     kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[0]>>>(
         matrixResult2Device,matrixResult1Device,flagCambioDevice2);
+
     gpuErrorCheck(cudaMemcpyAsync(flagCambioDevice3,&zero, sizeof(char),
         cudaMemcpyHostToDevice,stream[0]));
     kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[0]>>>(
         matrixResult3Device,matrixResult2Device,flagCambioDevice3);
+
+    gpuErrorCheck(cudaMemcpyAsync(flagCambioDevice4,&zero, sizeof(char),
+        cudaMemcpyHostToDevice,stream[0]));
+    kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[0]>>>(
+        matrixResult4Device,matrixResult3Device,flagCambioDevice4);
+
     for(t=0; flagCambio != 0; t++){
 		flagCambio = 0;
-        if(t % 3 == 0){
+        if(t % nStreams == 0){
             gpuErrorCheck(cudaMemcpyAsync(&flagCambio,flagCambioDevice1, sizeof(char),
                 cudaMemcpyDeviceToHost,stream[0]));
             gpuErrorCheck(cudaMemcpyAsync(flagCambioDevice1,&zero, sizeof(char),
                 cudaMemcpyHostToDevice,stream[0]));
             kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[0]>>>(
-                matrixResult1Device,matrixResult3Device,flagCambioDevice1);
-        } else if(t % 3 == 1){
+                matrixResult1Device,matrixResult4Device,flagCambioDevice1);
+        } else if(t % nStreams == 1){
             gpuErrorCheck(cudaMemcpyAsync(&flagCambio,flagCambioDevice2, sizeof(char),
                 cudaMemcpyDeviceToHost,stream[1]));
             gpuErrorCheck(cudaMemcpyAsync(flagCambioDevice2,&zero, sizeof(char),
                 cudaMemcpyHostToDevice,stream[1]));
             kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[1]>>>(
                 matrixResult2Device,matrixResult1Device,flagCambioDevice2);
-        } else {
+        } else if(t % nStreams == 2){
             gpuErrorCheck(cudaMemcpyAsync(&flagCambio,flagCambioDevice3, sizeof(char),
                 cudaMemcpyDeviceToHost,stream[2]));
             gpuErrorCheck(cudaMemcpyAsync(flagCambioDevice3,&zero, sizeof(char),
                 cudaMemcpyHostToDevice,stream[2]));
             kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[2]>>>(
                 matrixResult3Device,matrixResult2Device,flagCambioDevice3);
+        } else {
+            gpuErrorCheck(cudaMemcpyAsync(&flagCambio,flagCambioDevice4, sizeof(char),
+                cudaMemcpyDeviceToHost,stream[3]));
+            gpuErrorCheck(cudaMemcpyAsync(flagCambioDevice4,&zero, sizeof(char),
+                cudaMemcpyHostToDevice,stream[3]));
+            kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[3]>>>(
+                matrixResult4Device,matrixResult3Device,flagCambioDevice4);
         }
 	}
 
@@ -319,12 +331,14 @@ int main (int argc, char* argv[])
 	numBlocks = 0;
 	gpuErrorCheck(cudaMemcpyToSymbolAsync(numBlocksDevice,&numBlocks,
         sizeof(int),0,cudaMemcpyHostToDevice));
-    if(t % 3 == 0){
-        kernelCountFigures<<<gridShapeGpu, bloqShapeGpu,0,stream[0]>>>(matrixResult1Device);
-    } else if(t % 3 == 1){
-        kernelCountFigures<<<gridShapeGpu, bloqShapeGpu,0,stream[1]>>>(matrixResult2Device);
+    if(t % nStreams == 0){
+        kernelCountFigures<<<gridShapeGpu, bloqShapeGpu>>>(matrixResult1Device);
+    } else if(t % nStreams == 1){
+        kernelCountFigures<<<gridShapeGpu, bloqShapeGpu>>>(matrixResult2Device);
+    } else if(t % nStreams == 2){
+        kernelCountFigures<<<gridShapeGpu, bloqShapeGpu>>>(matrixResult3Device);
     } else {
-        kernelCountFigures<<<gridShapeGpu, bloqShapeGpu,0,stream[2]>>>(matrixResult3Device);
+        kernelCountFigures<<<gridShapeGpu, bloqShapeGpu>>>(matrixResult4Device);
     }
 	gpuErrorCheck(cudaPeekAtLastError());
 
@@ -366,9 +380,11 @@ int main (int argc, char* argv[])
 	gpuErrorCheck(cudaFree(matrixResult1Device));
     gpuErrorCheck(cudaFree(matrixResult2Device));
     gpuErrorCheck(cudaFree(matrixResult3Device));
+    gpuErrorCheck(cudaFree(matrixResult4Device));
     gpuErrorCheck( cudaStreamDestroy(stream[0]) );
     gpuErrorCheck( cudaStreamDestroy(stream[1]) );
     gpuErrorCheck( cudaStreamDestroy(stream[2]) );
+    gpuErrorCheck( cudaStreamDestroy(stream[3]) );
 
 	/*Liberamos los hilos del DEVICE*/
 	gpuErrorCheck(cudaDeviceReset());
