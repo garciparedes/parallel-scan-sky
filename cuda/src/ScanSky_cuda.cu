@@ -213,11 +213,10 @@ int main (int argc, char* argv[])
 //
 // EL CODIGO A PARALELIZAR COMIENZA AQUI
 //
-    cudaStream_t stream[4];
-    gpuErrorCheck( cudaStreamCreate(&stream[0]) );
-    gpuErrorCheck( cudaStreamCreate(&stream[1]) );
-    gpuErrorCheck( cudaStreamCreate(&stream[2]) );
-    gpuErrorCheck( cudaStreamCreate(&stream[3]) );
+    cudaStream_t stream[nStreams];
+    for(i = 0; i < nStreams; i++) {
+        gpuErrorCheck( cudaStreamCreate(&stream[i]) );
+    }
 
 	const dim3 bloqShapeGpu(columnsBloqShape,rowsBloqShape);
 	const dim3 gridShapeGpu(
@@ -381,10 +380,9 @@ int main (int argc, char* argv[])
     gpuErrorCheck(cudaFree(matrixResult2Device));
     gpuErrorCheck(cudaFree(matrixResult3Device));
     gpuErrorCheck(cudaFree(matrixResult4Device));
-    gpuErrorCheck( cudaStreamDestroy(stream[0]) );
-    gpuErrorCheck( cudaStreamDestroy(stream[1]) );
-    gpuErrorCheck( cudaStreamDestroy(stream[2]) );
-    gpuErrorCheck( cudaStreamDestroy(stream[3]) );
+    for(i = 0; i < nStreams; i++) {
+        gpuErrorCheck( cudaStreamDestroy(stream[i]) );
+    }
 
 	/*Liberamos los hilos del DEVICE*/
 	gpuErrorCheck(cudaDeviceReset());
