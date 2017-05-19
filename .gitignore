@@ -5,6 +5,7 @@
 
 ScanSky_*
 !ScanSky_*.c
+!ScanSky_*.cu
 
 ### C ###
 # Prerequisites

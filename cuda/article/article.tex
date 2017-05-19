@@ -1,0 +1,157 @@
+\documentclass[10pt, a4paper,spanish]{article}
+
+\usepackage{mystyle}
+\usepackage{myvars}
+
+
+
+%-----------------------------
+
+\begin{document}
+
+	\maketitle % Insert title
+
+	\thispagestyle{fancy} % All pages have headers and footers
+
+
+%-----------------------------
+%	ABSTRACT
+%-----------------------------
+
+	\begin{abstract}
+		\noindent En este documento se relatan el conjunto de mejoras aplicadas a un código secuencial base. El modelo de paralelización utilizado para dicha tarea ha sido \emph{GP-GPU}(General Purpouse computing on Graphics Processing Units), para lo cual se ha utilizado el framework \emph{CUDA}\cite{tool:cuda} en su versión para el lenguaje de programación \emph{C}. El código fuente obtenido tras dichas optimizaciones se podrá consultar a través de \url{https://github.com/garciparedes/parallel-scan-sky/blob/master/cuda/src/ScanSky_cuda.cu}\cite{code:parallel-scan-sky}
+	\end{abstract}
+
+%-----------------------------
+%	TEXT
+%-----------------------------
+
+
+	\section{Introducción}
+
+		\paragraph{}
+		En este documento se exponen el conjunto de mejoras realizadas sobre \say{un código secuencial para contar el número de objetos diferentes que se ven en una imagen o fotografía celeste, en general de espacio profundo, obtenida por un radiotelescopio}\cite{subject:cp}
+
+		\paragraph{}
+		\say{Las imágenes ya han sido procesadas, discretizando la luminosidad observada en cada punto en 16 diferentes niveles de grises o colores. Los pixels del fondo del espacio, una vez eliminado el ruido, tienen el índice de color 0. Los pixels de la imagen con una luminosidad o color suficientemente parecidos se representan con un mismo valor entre 1 y 15.}\cite{subject:cp}
+
+		\paragraph{}
+		\say{La imagen se carga en una matriz desde un fichero de texto plano. El fichero contiene un número entero en cada línea. Las dos primeras líneas contienen el número de filas y columnas de la imagen. El resto son números entre 0 y 15 con los valores de cada pixel, ordenados por filas.}\cite{subject:cp}
+
+		\paragraph{}
+		\say{Los pixels del mismo índice de color que están juntos, en horizontal o vertical (no en diagonal), se considera que son del mismo objeto. El programa etiqueta cada objeto de la imagen con una etiqueta diferente. Todos los pixels del mismo objeto tendrán la misma etiqueta. Para determinar el número de objetos, al final se cuentan el número de etiquetas diferentes. Los píxeles de índice 0 no se etiquetan.}\cite{subject:cp}
+
+	\section{Optimización}
+
+		\paragraph{}
+		Para la mejora de rendimiento en este trabajo se ha utilizado el modelo de programación paralela basado en \textbf{SIMD}(una instrucción realizada sobre muchos datos) puesto que el dispositivo físico de soporte utilizado han sido tarjetas gráficas. Tal y como se ha indicado anteriormente se ha utilizado el modelo de \emph{CUDA} desarrollado por \emph{NVIDIA}.
+
+		\paragraph{}
+		Lo primero es indicar los tamaños de bloque utilizados para la computación en el dispositivo externo: Se han escogido bloque de \textbf{16 x 8} tras realizar varias pruebas para encontrar el tamaño óptimo. Puesto que se ha utilizado una estrategia de programación especulativa, también ha sido necesario escoger el nivel de especulación (número de pasos hacia delante a realizar), que siguiendo el mismo procedimiento de experimentación, se ha fijado en \textbf{4 streams}.
+
+		\paragraph{}
+		El modelo de computación \emph{CUDA} describe las secciones de código procesado en el dispositivo como \emph{Kernels}. En este caso se han utilizado \textbf{3 Kernels}, referidos a las fases de rellenado de la matriz, propagación de los indices entre las figuras iguales y conteo de figuras distintas. Estos \emph{kernels} se muestran en las figuras \ref{code:k1}, \ref{code:k2} y \ref{code:k3} respectivamente.
+
+		\begin{figure}[h]
+			\centering
+			\inputminted{cuda}{./code/k1.cu}
+			\caption{\texttt{kernelFillMatrix()}}
+			\label{code:k1}
+		\end{figure}
+
+		\paragraph{}
+		Para el procesamiento de las matrices se ha decidido dedicar cada hilo a una celda de la misma (puesto que en el modelo de computación con apoyo de GPUs el número de unidades de cómputo generalmente no es un problema). Algo a destacar es la necesidad de \say{filtrar} el procesamiento para que los hilos sobrantes (debido a la cantidad de grids, que debe ser siempre mayor a los necearios) mediante operadores condicionales en lugar de los bucles iterativos usados en la solución secuencial.
+
+
+		\begin{figure}[h]
+			\centering
+			\inputminted{cuda}{./code/k2.cu}
+			\caption{\texttt{kernelComputationLoop()}}
+			\label{code:k2}
+		\end{figure}
+
+		\paragraph{}
+		En los dos primeros \emph{kernels} no es necesario realizar sincronizaciones entre bloques o procesos. Sin embargo, en el último se realiza una reducción para el conteo de figuras distintas. La alternativa escogida ha sido la utilización de la función \texttt{atomicAdd()}, que a pesar de no ofrecer un rendimiento tan óptimo como la solución manual, simplifica en gran medida la tarea.
+
+		\begin{figure}[h]
+			\centering
+			\inputminted{cuda}{./code/k3.cu}
+			\caption{\texttt{kernelCountFigures()}}
+			\label{code:k3}
+		\end{figure}
+
+		\paragraph{}
+		Una vez descritos los \emph{kernels} implementados se describen las estructuras de datos en que se ha apoyado el cómputo, estas se muestran en la figura \ref{code:malloc}. En algunos casos se ha utilizado la zona de memoria constante, que reduce el tiempo de acceso a la misma, mientras que en otros el almacenamiento se ha apoyado en la memoria compartida del dispositivo.
+
+		\paragraph{}
+		Algo a destacar es el \say{casteo} de la matriz de datos del tipo \texttt{int} al tipo \texttt{char} lo cual reduce en 4 el tamaño de la misma. Esta operación se realiza en la CPU porque la redución posterior del tiempo de transferencia lo compensa. En esta parte sucede un suceso curioso para el cual no se ha encontrado explicación. La reserva de memoria se hace a partir de la función \texttt{cudaMallocPitch()}, que se supone que alinea la memoria para mejorar la eficiencia, por lo que la documentación indica que para la transferencia de datos entre la \emph{CPU} y el \emph{Dispositivo Externo} es necesario utilizar \texttt{cudaMemcpy2DAsync()} para ser consistente con el alineamiento. Sin embargo, el uso de esta función conlleva un resultado erróneo, mientras que la transferencia mediante \texttt{cudaMemcpyAsync()} si que proporciona un funcionamiento válido.
+
+		\paragraph{}
+		El segundo factor a destacar (derivado del uso de procesamiento \emph{multi-streaming}) es la fusión de la \texttt{matrixResult} y \texttt{matrixResultCopy} en una nueva matriz de gran tamaño con lo que se consigue que estas estén colocadas de manera contigua estrictamente en memoria. A pesar de ello esta no ha sido la razón principal, sino la de poder llevar a cabo fases de \textbf{programación especulativa} en cuanto al número de iteraciones en \texttt{kernelComputationLoop()} (para lo cual es necesario poseer tantas matrices como niveles de especulación se desee llevar a cabo).
+
+		\begin{figure}[h]
+			\centering
+			\inputminted{cuda}{./code/malloc.cu}
+			\caption{Reserva de memoria para las Estructuras de Datos}
+			\label{code:malloc}
+		\end{figure}
+
+		\paragraph{}
+		A continuación se describen las distintas fases de la implementación mediante las llamadas a los \emph{kernels}. En primer lugar se realiza una llamada a \texttt{kernelFillMatrix()} para que rellene el segmento correspondiente a la anterior \texttt{matrixResult} que ahora se representa en la primera parte de \texttt{matrixResult\_d}.
+
+		\begin{figure}[h]
+			\centering
+			\inputminted{cuda}{./code/fill.cu}
+			\caption{Fase de Rellenado}
+			\label{code:fill}
+		\end{figure}
+
+		\paragraph{}
+		Una vez hecho esto comienza la sección de cómputo, dominada por la variable \texttt{flagCambio}. Debido a la estrategia de \emph{Programación Especulativa}, primeramente se realiza un lanzamiento secuencial para los distintos niveles de especulación sobre el \texttt{stream[0]} para que estos permanezcan sincronizados durante el resto del cómputo, ya que su nuevo lanzamiento no se llevará a cabo hasta haberse completado el anterior. Esto se extrapola a su lanzamiento en diferentes streams y la variable \texttt{flagCambio} en el bucle \texttt{t}.
+
+		\begin{figure}[h]
+			\centering
+			\inputminted{cuda}{./code/compu.cu}
+			\caption{Bucle Principal de Cómputo}
+			\label{code:compu}
+		\end{figure}
+
+		\paragraph{}
+		Nótese que esta estrategia no reduce el número de iteraciones necesarias para la resolución del problema, sino que solapa fases de transferencia de datos y computación en el dispositivo externo.
+
+		\begin{figure}[h]
+			\centering
+			\inputminted{cuda}{./code/count.cu}
+			\caption{Conteo de figuras en la matriz}
+			\label{code:count}
+		\end{figure}
+
+		\paragraph{}
+		El último paso es el conteo de figuras en la matriz de resultados (la parte correspondiente de \texttt{matrixResult\_d} respecto de la iteración la cuál finalizó el cómputo). Esto se ilustra en la figura \ref{code:count} en la cual se realiza la llamada al \emph{kernel} \texttt{kernelCountFigures()}. Una vez finalizada dicha operación, se devuelve a la \emph{CPU} el valor deseado y el programa finaliza tras el pertinente vaciado de memoria, tanto en la \emph{CPU} como en el \emph{dispositivo externo}.
+
+		\begin{figure}[h]
+			\centering
+			\inputminted{cuda}{./code/error.cu}
+			\caption{Estrategia de validación de Errores}
+			\label{code:error}
+		\end{figure}
+
+		\paragraph{}
+		Por último, se ha añadido una parte destinada al control de errores producidos en el dispositivo externo, la cual termina la ejecucción e imprime en salida estándar el mensaje de error, junto con la línea y el fichero donde se produjeron. Esta implementación ha sido extraida de un ejemplo de código al cual se puede acceder a partir de: \url{http://www.orangeowlsolutions.com/archives/613} \cite{orangeowlsolutions:error}
+
+	\section{Conclusiones y Propuestas Futuras}
+
+		\paragraph{}
+		El uso de dispositivos externos que siguen el paradigma \textbf{SIMD} para accelerar regiones inerentemente paralelas como operaciones sobre estructuras de datos matriciales proporciona una gran ventaja respecto de implementaciones secuenciales. Sin embargo, es muy importante la correcta gestión de la memoria del dispositivo para que siempre tenga trabajo para realizar.
+
+		\paragraph{}
+		En cuanto a propuestas futuras de trabajo, se puede tratar de mejorar los accesos a memoria utilizando almacenando en el dispositivo inicialmente (mediante \texttt{\_\_device\_\_}) el mayor número de variables posible. Otra de las propuestas futuras es la extensión de dicha solución a varios dispositivos externos (puesto que actualmente tan solo es posible su ejecución en uno de ellos).
+
+%-----------------------------
+%	Bibliographic references
+%-----------------------------
+	\nocite{subject:cp}
+  \bibliographystyle{acm}
+  \bibliography{bib/misc}
+
+\end{document}
