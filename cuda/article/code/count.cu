@@ -2,7 +2,7 @@ numBlocks = 0;
 gpuErrorCheck(cudaMemcpyToSymbolAsync(numBlocks_d,&numBlocks,
     sizeof(int),0,cudaMemcpyHostToDevice));
 kernelCountFigures<<<gridShapeGpu, bloqShapeGpu>>>(
-    &matrixResult_d[rows * columns * (t % nStreams)]
+    &matrixResult_d[rows * columns * ((t + 1) % nStreams)]
 );
 gpuErrorCheck(cudaPeekAtLastError());
 gpuErrorCheck(cudaMemcpyFromSymbolAsync(&numBlocks, numBlocks_d,

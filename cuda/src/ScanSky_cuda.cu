@@ -66,35 +66,33 @@ __global__ void kernelComputationLoop(int *matrixResult,int *matrixResultCopy,
 
 	/* 4.2.2 Computo y detecto si ha habido cambios */
 	if(i > 0 && i<rows_d-1 &&
-		j > 0 && j<columns_d-1){
+		j > 0 && j<columns_d-1 &&
+        matrixResult[i*columns_d+j] != -1){
 
-		if(matrixResult[i*columns_d+j] != -1){
-
-			matrixResult[i*columns_d+j] = matrixResultCopy[i*columns_d+j];
-			if((matrixData_d[(i-1)*columns_d+j] == matrixData_d[i*columns_d+j]) &&
-				(matrixResult[i*columns_d+j] > matrixResultCopy[(i-1)*columns_d+j]))
-			{
-				matrixResult[i*columns_d+j] = matrixResultCopy[(i-1)*columns_d+j];
-				*flagCambio_d = 1;
-			}
-			if((matrixData_d[(i+1)*columns_d+j] == matrixData_d[i*columns_d+j]) &&
-				(matrixResult[i*columns_d+j] > matrixResultCopy[(i+1)*columns_d+j]))
-			{
-				matrixResult[i*columns_d+j] = matrixResultCopy[(i+1)*columns_d+j];
-				*flagCambio_d = 1;
-			}
-			if((matrixData_d[i*columns_d+j-1] == matrixData_d[i*columns_d+j]) &&
-				(matrixResult[i*columns_d+j] > matrixResultCopy[i*columns_d+j-1]))
-			{
-				matrixResult[i*columns_d+j] = matrixResultCopy[i*columns_d+j-1];
-				*flagCambio_d = 1;
-			}
-			if((matrixData_d[i*columns_d+j+1] == matrixData_d[i*columns_d+j]) &&
-				(matrixResult[i*columns_d+j] > matrixResultCopy[i*columns_d+j+1]))
-			{
-				matrixResult[i*columns_d+j] = matrixResultCopy[i*columns_d+j+1];
-				*flagCambio_d = 1;
-			}
+		matrixResult[i*columns_d+j] = matrixResultCopy[i*columns_d+j];
+		if((matrixData_d[(i-1)*columns_d+j] == matrixData_d[i*columns_d+j]) &&
+			(matrixResult[i*columns_d+j] > matrixResultCopy[(i-1)*columns_d+j]))
+		{
+			matrixResult[i*columns_d+j] = matrixResultCopy[(i-1)*columns_d+j];
+			*flagCambio_d = 1;
+		}
+		if((matrixData_d[(i+1)*columns_d+j] == matrixData_d[i*columns_d+j]) &&
+			(matrixResult[i*columns_d+j] > matrixResultCopy[(i+1)*columns_d+j]))
+		{
+			matrixResult[i*columns_d+j] = matrixResultCopy[(i+1)*columns_d+j];
+			*flagCambio_d = 1;
+		}
+		if((matrixData_d[i*columns_d+j-1] == matrixData_d[i*columns_d+j]) &&
+			(matrixResult[i*columns_d+j] > matrixResultCopy[i*columns_d+j-1]))
+		{
+			matrixResult[i*columns_d+j] = matrixResultCopy[i*columns_d+j-1];
+			*flagCambio_d = 1;
+		}
+		if((matrixData_d[i*columns_d+j+1] == matrixData_d[i*columns_d+j]) &&
+			(matrixResult[i*columns_d+j] > matrixResultCopy[i*columns_d+j+1]))
+		{
+			matrixResult[i*columns_d+j] = matrixResultCopy[i*columns_d+j+1];
+			*flagCambio_d = 1;
 		}
 	}
 }
@@ -254,7 +252,7 @@ int main (int argc, char* argv[])
 
 	/* 3. Etiquetado inicial */
 	kernelFillMatrixResult<<<gridShapeGpu, bloqShapeGpu>>>(
-        &matrixResult_d[rows * columns * (nStreams-1)]
+        &matrixResult_d[rows * columns * 0]
     );
 	gpuErrorCheck(cudaPeekAtLastError());
 
@@ -262,12 +260,11 @@ int main (int argc, char* argv[])
 	t=0;
 	/* 4.1 Flag para ver si ha habido cambios y si se continua la ejecucion */
 	flagCambio=1;
-
     gpuErrorCheck(cudaMemsetAsync(flagCambio_d, 0, sizeof(char) * 4, stream[0]));
     for (i = 0; i < nStreams; i++){
         kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[0]>>>(
+            &matrixResult_d[rows * columns * ((i+1)%nStreams)],
             &matrixResult_d[rows * columns * i],
-            &matrixResult_d[rows * columns * ((i - 1 + nStreams) % nStreams)],
             &flagCambio_d[i]
         );
     }
@@ -281,8 +278,8 @@ int main (int argc, char* argv[])
         gpuErrorCheck(cudaMemcpyAsync(&flagCambio_d[s],&zero, sizeof(char),
             cudaMemcpyHostToDevice,stream[s]));
         kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[s]>>>(
+            &matrixResult_d[rows * columns * ((s+1)%nStreams)],
             &matrixResult_d[rows * columns * s],
-            &matrixResult_d[rows * columns * ((s - 1 + nStreams) % nStreams)],
             &flagCambio_d[s]
         );
 	}
@@ -294,7 +291,7 @@ int main (int argc, char* argv[])
 	gpuErrorCheck(cudaMemcpyToSymbolAsync(numBlocks_d,&numBlocks,
         sizeof(int),0,cudaMemcpyHostToDevice));
     kernelCountFigures<<<gridShapeGpu, bloqShapeGpu>>>(
-        &matrixResult_d[rows * columns * (t % nStreams)]
+        &matrixResult_d[rows * columns * ((t + 1) % nStreams)]
     );
 	gpuErrorCheck(cudaPeekAtLastError());
 	gpuErrorCheck(cudaMemcpyFromSymbolAsync(&numBlocks, numBlocks_d,
