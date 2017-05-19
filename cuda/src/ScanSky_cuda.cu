@@ -140,10 +140,7 @@ int main (int argc, char* argv[])
     int *matrixResult_d_1;
     int *matrixResult_d_2;
     int *matrixResult_d_3;
-    char *flagCambio_d_0;
-    char *flagCambio_d_1;
-    char *flagCambio_d_2;
-    char *flagCambio_d_3;
+    char *flagCambio_d;
 
 	/* 2. Leer Fichero de entrada e inicializar datos */
 
@@ -229,10 +226,7 @@ int main (int argc, char* argv[])
 	size_t pitch,pitch3;
 
 
-    gpuErrorCheck(cudaMalloc(&flagCambio_d_0, sizeof(char)));
-    gpuErrorCheck(cudaMalloc(&flagCambio_d_1, sizeof(char)));
-    gpuErrorCheck(cudaMalloc(&flagCambio_d_2, sizeof(char)));
-    gpuErrorCheck(cudaMalloc(&flagCambio_d_3, sizeof(char)));
+    gpuErrorCheck(cudaMalloc(&flagCambio_d, sizeof(char) * nStreams));
     gpuErrorCheck(cudaMallocPitch(&matrixResult_d_0, &pitch, rows*sizeof(int), columns));
     gpuErrorCheck(cudaMallocPitch(&matrixResult_d_1, &pitch, rows*sizeof(int), columns));
     gpuErrorCheck(cudaMallocPitch(&matrixResult_d_2, &pitch, rows*sizeof(int), columns));
@@ -273,56 +267,47 @@ int main (int argc, char* argv[])
 	/* 4.1 Flag para ver si ha habido cambios y si se continua la ejecucion */
 	flagCambio=1;
 
-    gpuErrorCheck(cudaMemcpyAsync(flagCambio_d_0,&zero, sizeof(char),
-        cudaMemcpyHostToDevice,stream[0]));
+    gpuErrorCheck(cudaMemsetAsync(flagCambio_d, 0, sizeof(char) * 4, stream[0]));
     kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[0]>>>(
-        matrixResult_d_0,matrixResult_d_3,flagCambio_d_0);
-
-    gpuErrorCheck(cudaMemcpyAsync(flagCambio_d_1,&zero, sizeof(char),
-        cudaMemcpyHostToDevice,stream[0]));
+        matrixResult_d_0,matrixResult_d_3,&flagCambio_d[0]);
     kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[0]>>>(
-        matrixResult_d_1,matrixResult_d_0,flagCambio_d_1);
-
-    gpuErrorCheck(cudaMemcpyAsync(flagCambio_d_2,&zero, sizeof(char),
-        cudaMemcpyHostToDevice,stream[0]));
+        matrixResult_d_1,matrixResult_d_0,&flagCambio_d[1]);
     kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[0]>>>(
-        matrixResult_d_2,matrixResult_d_1,flagCambio_d_2);
-
-    gpuErrorCheck(cudaMemcpyAsync(flagCambio_d_3,&zero, sizeof(char),
-        cudaMemcpyHostToDevice,stream[0]));
+        matrixResult_d_2,matrixResult_d_1,&flagCambio_d[2]);
     kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[0]>>>(
-        matrixResult_d_3,matrixResult_d_2,flagCambio_d_3);
+        matrixResult_d_3,matrixResult_d_2,&flagCambio_d[3]);
+    gpuErrorCheck(cudaPeekAtLastError());
 
     for(t=0; flagCambio != 0; t++){
 		flagCambio = 0;
         if(t % nStreams == 0){
-            gpuErrorCheck(cudaMemcpyAsync(&flagCambio,flagCambio_d_0, sizeof(char),
+            gpuErrorCheck(cudaMemcpyAsync(&flagCambio,&flagCambio_d[0], sizeof(char),
                 cudaMemcpyDeviceToHost,stream[0]));
-            gpuErrorCheck(cudaMemcpyAsync(flagCambio_d_0,&zero, sizeof(char),
+            gpuErrorCheck(cudaMemcpyAsync(&flagCambio_d[0],&zero, sizeof(char),
                 cudaMemcpyHostToDevice,stream[0]));
             kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[0]>>>(
-                matrixResult_d_0,matrixResult_d_3,flagCambio_d_0);
+                matrixResult_d_0,matrixResult_d_3,&flagCambio_d[0]);
         } else if(t % nStreams == 1){
-            gpuErrorCheck(cudaMemcpyAsync(&flagCambio,flagCambio_d_1, sizeof(char),
+            gpuErrorCheck(cudaMemcpyAsync(&flagCambio,&flagCambio_d[1], sizeof(char),
                 cudaMemcpyDeviceToHost,stream[1]));
-            gpuErrorCheck(cudaMemcpyAsync(flagCambio_d_1,&zero, sizeof(char),
+            gpuErrorCheck(cudaMemcpyAsync(&flagCambio_d[1],&zero, sizeof(char),
                 cudaMemcpyHostToDevice,stream[1]));
             kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[1]>>>(
-                matrixResult_d_1,matrixResult_d_0,flagCambio_d_1);
+                matrixResult_d_1,matrixResult_d_0,&flagCambio_d[1]);
         } else if(t % nStreams == 2){
-            gpuErrorCheck(cudaMemcpyAsync(&flagCambio,flagCambio_d_2, sizeof(char),
+            gpuErrorCheck(cudaMemcpyAsync(&flagCambio,&flagCambio_d[2], sizeof(char),
                 cudaMemcpyDeviceToHost,stream[2]));
-            gpuErrorCheck(cudaMemcpyAsync(flagCambio_d_2,&zero, sizeof(char),
+            gpuErrorCheck(cudaMemcpyAsync(&flagCambio_d[2],&zero, sizeof(char),
                 cudaMemcpyHostToDevice,stream[2]));
             kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[2]>>>(
-                matrixResult_d_2,matrixResult_d_1,flagCambio_d_2);
+                matrixResult_d_2,matrixResult_d_1,&flagCambio_d[2]);
         } else {
-            gpuErrorCheck(cudaMemcpyAsync(&flagCambio,flagCambio_d_3, sizeof(char),
+            gpuErrorCheck(cudaMemcpyAsync(&flagCambio,&flagCambio_d[3], sizeof(char),
                 cudaMemcpyDeviceToHost,stream[3]));
-            gpuErrorCheck(cudaMemcpyAsync(flagCambio_d_3,&zero, sizeof(char),
+            gpuErrorCheck(cudaMemcpyAsync(&flagCambio_d[3],&zero, sizeof(char),
                 cudaMemcpyHostToDevice,stream[3]));
             kernelComputationLoop<<<gridShapeGpu, bloqShapeGpu,0,stream[3]>>>(
-                matrixResult_d_3,matrixResult_d_2,flagCambio_d_3);
+                matrixResult_d_3,matrixResult_d_2,&flagCambio_d[3]);
         }
 	}
 
