@@ -2,6 +2,6 @@
 
 ulimit -s 65532
 
-make
+nvcc -O3 -arch=sm_35 -o ScanSky_cuda ScanSky_cuda.cu
 
-# TODO
+./ScanSky_cuda $1
