@@ -9,8 +9,8 @@ cd cuda/src
 ./run.sh ../../data-sets/circles1.data
 ```
 
-- Docs:
-[Article](cuda/article/article.pdf)
+- [Source Code](cuda/src)
+- [Paper](cuda/article/article.pdf)
 
 ## mpi
 
@@ -20,8 +20,8 @@ cd mpi/src
 ./run.sh 4 ../../data-sets/circles1.data
 ```
 
-- Docs:
-[Article](mpi/article/article.pdf)
+- [Source Code](mpi/src)
+- [Paper](mpi/article/article.pdf)
 
 ## openmp
 
@@ -32,8 +32,8 @@ cd openmp/src
 ```
 
 - Docs:
-[Article](openmp/article/article.pdf)
-
+- [Source Code](openmp/src)
+- [Paper](openmp/article/article.pdf)
 ## secuential
 
 - Usage:
@@ -43,6 +43,7 @@ cd secuential/src
 make
 ./ScanSky ../../data-sets/circles1.data
 ```
+- [Source Code](sequential/src)
 
 ## Authors
 
