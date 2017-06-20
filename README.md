@@ -1,5 +1,7 @@
-# parallel-scan-sky
-- [tablón uva](http://frontendv.infor.uva.es/)
+# Parallel Scan Sky
+
+### Description
+[TODO]
 
 ## cuda
 
